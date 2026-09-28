@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Splash mark: gold frame, purple ridge (as in the app). 96dp wide, centred in a 288dp canvas. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="288dp" android:height="288dp"
+    android:viewportWidth="288" android:viewportHeight="288">
+    <group android:scaleX="2.6666666666666665" android:scaleY="2.6666666666666665" android:translateX="90.6667" android:translateY="90.6667">
+        <path android:pathData="M8,4 H32 A6,6 0 0 1 38,10 V30 A6,6 0 0 1 32,36 H8 A6,6 0 0 1 2,30 V10 A6,6 0 0 1 8,4 Z" android:strokeColor="#CC8500" android:strokeWidth="2.4" android:fillColor="#00000000"/>
+        <path android:pathData="M7,8 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z M7,18.5 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z M7,29 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z M32,8 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z M32,18.5 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z M32,29 h1 a1,1 0 0 1 1,1 v1 a1,1 0 0 1 -1,1 h-1 a1,1 0 0 1 -1,-1 v-1 a1,1 0 0 1 1,-1 Z" android:fillColor="#CC8500"/>
+        <path android:pathData="M11,28 L16.5,19 L19.5,23 L23,15 L29,28 Z" android:fillColor="#580076"/>
+        <path android:pathData="M11,28 L16.5,19 L19.5,23 L23,15 L29,28 Z" android:strokeColor="#CC8500" android:strokeWidth="1.2" android:strokeLineJoin="round" android:fillColor="#00000000"/>
+    </group>
+</vector>

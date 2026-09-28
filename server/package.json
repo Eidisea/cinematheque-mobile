@@ -1,0 +1,16 @@
+{
+  "name": "ccd-server",
+  "private": true,
+  "description": "Cinematheque Centre Davao - server-side API (Vercel). Holds all secrets; the only writer of reservations, payments and seat holds.",
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test --test-concurrency=1 \"test/**/*.test.js\"",
+    "dev": "node dev-server.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^14.5.0"
+  }
+}

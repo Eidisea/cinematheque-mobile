@@ -1,0 +1,203 @@
+rules_version = '2';
+
+// Cinematheque Centre Davao — Firestore security rules
+//
+// Who can do what:
+//   Everyone (customers, no login)  → READ movies, screenings, seat layout; GET one booking view by its key
+//   Active staff (Firebase Auth +   → WRITE movies, screening event details, seat layout, attendances
+//     staff/{uid}.isActive == true)   READ reservations, payments, attendances, staff
+//   Server (Vercel, Admin SDK)      → everything else: reservations, payments, booking views, seat holds,
+//                                     staff accounts. The Admin SDK bypasses these rules, so clients never
+//                                     get write access to those collections.
+// Anything not matched below is denied.
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ---------- helpers ----------
+
+    function signedIn() {
+      return request.auth != null;
+    }
+
+    // A Firebase Auth account alone is NOT enough (anyone can create one with the
+    // public web key). Staff = an ACTIVE document in staff/{uid}, created by the server.
+    function isStaff() {
+      let staffDoc = /databases/$(database)/documents/staff/$(request.auth.uid);
+      return signedIn() && exists(staffDoc) && get(staffDoc).data.isActive == true;
+    }
+
+    function text(v, min, max) {
+      return v is string && v.size() >= min && v.size() <= max;
+    }
+
+    function optText(v, max) {
+      return v == null || text(v, 0, max);
+    }
+
+    function optInt(v, min, max) {
+      return v == null || (v is int && v >= min && v <= max);
+    }
+
+    function nameList(v, maxItems) {
+      return v is list && v.size() <= maxItems;
+    }
+
+    function exactKeys(d, keys) {
+      return d.keys().hasOnly(keys) && d.keys().hasAll(keys);
+    }
+
+    function createdNow(d) {
+      return d.createdAt == request.time && d.updatedAt == request.time;
+    }
+
+    function updatedNow(d) {
+      return d.createdAt == resource.data.createdAt && d.updatedAt == request.time;
+    }
+
+    function changedKeys() {
+      return request.resource.data.diff(resource.data).affectedKeys();
+    }
+
+    // ---------- staff accounts (server-managed) ----------
+
+    match /staff/{uid} {
+      // A signed-in user may read their own doc (so the staff app can say "inactive").
+      allow get: if signedIn() && (request.auth.uid == uid || isStaff());
+      allow list: if isStaff();
+      allow write: if false;
+    }
+
+    // ---------- movies (staff-managed catalog) ----------
+
+    function validPoster(p) {
+      return p == null || (
+        p is map && exactKeys(p, ['url', 'publicId'])
+        && text(p.url, 1, 500) && p.url.matches('^https://res[.]cloudinary[.]com/.+')
+        && text(p.publicId, 1, 300)
+      );
+    }
+
+    function validMovie(d) {
+      return exactKeys(d, ['title', 'synopsis', 'runtimeMinutes', 'rating', 'releaseYear',
+                           'genres', 'directors', 'cast', 'poster', 'createdAt', 'updatedAt'])
+        && text(d.title, 1, 150)
+        && optText(d.synopsis, 5000)
+        && optInt(d.runtimeMinutes, 1, 600)
+        && optText(d.rating, 10)
+        && optInt(d.releaseYear, 1888, 2100)
+        && nameList(d.genres, 20) && nameList(d.directors, 20) && nameList(d.cast, 60)
+        && validPoster(d.poster);
+    }
+
+    match /movies/{movieId} {
+      allow read: if true;
+      allow create: if isStaff() && validMovie(request.resource.data) && createdNow(request.resource.data);
+      allow update: if isStaff() && validMovie(request.resource.data) && updatedNow(request.resource.data);
+      allow delete: if isStaff();
+    }
+
+    // ---------- seat layout (one document) ----------
+
+    match /settings/{settingId} {
+      allow read: if true;
+      allow create, update: if isStaff() && settingId == 'seatLayout'
+        && exactKeys(request.resource.data, ['seats', 'updatedAt', 'updatedBy'])
+        && request.resource.data.seats is list
+        && request.resource.data.seats.size() > 0
+        && request.resource.data.seats.size() <= 500
+        && request.resource.data.updatedBy == request.auth.uid
+        && request.resource.data.updatedAt == request.time;
+      allow delete: if false;
+    }
+
+    // ---------- screenings ----------
+
+    function validScreeningEvent(d) {
+      return text(d.eventTitle, 1, 150)
+        && (d.movieId == null || text(d.movieId, 1, 100))
+        && (d.movie == null || (d.movie is map && text(d.movie.title, 1, 150)))
+        && ((d.movieId == null) == (d.movie == null))
+        && d.startAt is timestamp && d.endAt is timestamp && d.endAt > d.startAt
+        && ((d.type == 'free' && d.priceCentavos == null)
+            || (d.type == 'paid' && d.priceCentavos is int
+                && d.priceCentavos > 0 && d.priceCentavos <= 10000000))
+        && d.capacity is int && d.capacity > 0 && d.capacity <= 500;
+    }
+
+    match /screenings/{screeningId} {
+      allow read: if true;
+
+      // New screenings start with no seat holds and no reservations.
+      allow create: if isStaff()
+        && exactKeys(request.resource.data, ['eventTitle', 'movieId', 'movie', 'startAt', 'endAt',
+                     'type', 'priceCentavos', 'capacity', 'seatHolds', 'hasReservations',
+                     'createdBy', 'createdAt', 'updatedAt'])
+        && validScreeningEvent(request.resource.data)
+        && request.resource.data.seatHolds == {}
+        && request.resource.data.hasReservations == false
+        && request.resource.data.createdBy == request.auth.uid
+        && createdNow(request.resource.data);
+
+      // Staff edit event details only. Seat holds / hasReservations belong to the server.
+      // Once anyone has reserved, type, price, capacity and date/time are frozen.
+      allow update: if isStaff()
+        && changedKeys().hasOnly(['eventTitle', 'movieId', 'movie', 'startAt', 'endAt',
+                                  'type', 'priceCentavos', 'capacity', 'updatedAt'])
+        && validScreeningEvent(request.resource.data)
+        && request.resource.data.updatedAt == request.time
+        && (resource.data.hasReservations == false
+            || !changedKeys().hasAny(['type', 'priceCentavos', 'capacity', 'startAt', 'endAt']));
+
+      // Screenings that ever had a reservation keep their history.
+      allow delete: if isStaff() && resource.data.hasReservations == false;
+    }
+
+    // ---------- reservations, payments, booking views (server-only writes) ----------
+
+    match /reservations/{reservationId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    match /payments/{reservationId} {
+      allow read: if isStaff();
+      allow write: if false;
+    }
+
+    // Customers read ONE booking by its long random access key. Listing is never allowed,
+    // so nobody can browse other people's bookings.
+    match /bookingViews/{accessKey} {
+      allow get: if true;
+      allow list: if false;
+      allow write: if false;
+    }
+
+    // ---------- attendance (staff admit people onsite) ----------
+
+    function validNewAttendance(attendanceId) {
+      let d = request.resource.data;
+      let r = get(/databases/$(database)/documents/reservations/$(d.reservationId)).data;
+      return exactKeys(d, ['reservationId', 'bookingReference', 'screeningId', 'seatLabel',
+                           'attendeeName', 'checkedInBy', 'checkedInAt', 'remarks'])
+        && attendanceId == d.reservationId + '_' + d.seatLabel   // one admission per seat
+        && r.status == 'confirmed'                               // only approved/paid bookings
+        && d.seatLabel in r.seatLabels                           // a seat of THIS reservation
+        && d.screeningId == r.screeningId
+        && d.bookingReference == r.bookingReference
+        && text(d.attendeeName, 1, 160)
+        && d.checkedInBy == request.auth.uid
+        && d.checkedInAt == request.time
+        && optText(d.remarks, 2000);
+    }
+
+    match /attendances/{attendanceId} {
+      allow read: if isStaff();
+      allow create: if isStaff() && validNewAttendance(attendanceId);
+      allow update: if isStaff()                                  // notes only
+        && changedKeys().hasOnly(['remarks'])
+        && optText(request.resource.data.remarks, 2000);
+      allow delete: if isStaff();                                 // "undo" an admission made by mistake
+    }
+  }
+}

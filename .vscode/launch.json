@@ -1,0 +1,18 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Customer app (Android)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_customer.dart"
+    },
+    {
+      "name": "Staff app (Web, Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main_staff.dart",
+      "deviceId": "chrome"
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1057290002910",
+    "project_id": "cinematheque-48a54",
+    "storage_bucket": "cinematheque-48a54.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1057290002910:android:a0bcdaa937a3394d2dbd4f",
+        "android_client_info": {
+          "package_name": "edu.cce106.ccd_mobile"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDziyyZL7W5CEEAyBCL06VJbjjZ7Tuomts"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

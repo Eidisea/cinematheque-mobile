@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Cinematheque ink: the launcher icon's background (gold mark on dark reads at any size). -->
+    <color name="ic_launcher_background">#141219</color>
+    <!-- Warm paper: the app's background, so launch → splash → app never flashes white. -->
+    <color name="ccd_paper">#FAF9F7</color>
+</resources>
