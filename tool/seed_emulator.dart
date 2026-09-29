@@ -66,88 +66,104 @@ Future<void> main() async {
   }
 }
 
-/// SAMPLE catalog for local testing only — fictional titles, no posters (none provided).
+/// DEMO catalog: Cinematheque Centre Davao's real lineup as published by FDCP for May 2026
+/// (https://fdcp.ph/events/cinematheque-centre-davao-may-showing) — the most recent Davao
+/// schedule FDCP lists publicly. Titles, programmes, start times and prices are FDCP's; the
+/// DATES are moved to the coming week so the demo always has upcoming screenings.
+/// Film details are limited to facts that are certain (year, director); synopses, runtimes
+/// and posters are left empty rather than invented.
 Future<void> _seedCatalog(List<String> seatLabels) async {
   final now = DateTime.now().toUtc();
-  final hour = DateTime.utc(now.year, now.month, now.day, now.hour);
-  DateTime at(Duration d) => hour.add(d);
+  // Days are counted in Manila time (UTC+8), starting tomorrow.
+  final manilaToday = now.add(const Duration(hours: 8));
+  DateTime at(int day, int hour, [int minute = 0]) =>
+      DateTime.utc(manilaToday.year, manilaToday.month, manilaToday.day + 1 + day, hour - 8, minute);
 
-  const films = {
-    'sample-film-1': (
-      title: 'Lungsod ng Ulan',
-      synopsis: 'Sample data for local testing only. A fictional drama used to check the customer app layout.',
-      runtime: 118,
-      rating: 'PG',
-      year: 2024,
-      genres: ['Drama'],
-      directors: ['Sample Director'],
-      cast: ['Sample Actor One', 'Sample Actor Two'],
-    ),
-    'sample-film-2': (
-      title: 'Dagat at Liwanag',
-      synopsis: 'Sample data for local testing only. A fictional documentary.',
-      runtime: 92,
-      rating: 'G',
-      year: 2023,
-      genres: ['Documentary', 'Family'],
-      directors: ['Another Sample Director'],
-      cast: <String>[],
-    ),
+  // Short forms of FDCP's programme names ("Pamanang Pelikula: A Tribute to …", "FDCP Presents: …"),
+  // shown as each ticket's eyebrow.
+  const lvn = 'Tribute to LVN Pictures';
+  const nora = 'Tribute to Nora Aunor';
+  const world = 'FDCP Presents: World Cinema';
+
+  // id: (title, year, directors)
+  const films = <String, (String, int?, List<String>)>{
+    'malvarosa': ('Malvarosa', 1958, ['Gregorio Fernandez']),
+    'biyaya-ng-lupa': ('Biyaya ng Lupa', 1959, ['Manuel Silos']),
+    'anak-dalita': ('Anak Dalita', 1956, ['Lamberto V. Avellana']),
+    'sumpaan': ('Sumpaan', null, <String>[]),
+    'banaue': ('Banaue', 1975, ['Gerardo de León']),
+    'himala': ('Himala', 1982, ['Ishmael Bernal']),
+    'dont-tell-mother': ("Don't Tell Mother", null, <String>[]),
+    'it-was-just-an-accident': ('It Was Just an Accident', 2025, ['Jafar Panahi']),
+    'case-137': ('Case 137', 2025, ['Dominik Moll']),
+    'the-secret-agent': ('The Secret Agent', 2025, ['Kleber Mendonça Filho']),
+    'sound-of-falling': ('Sound of Falling', 2025, ['Mascha Schilinski']),
+    'resurrection': ('Resurrection', 2025, ['Bi Gan']),
+    'the-blue-trail': ('The Blue Trail', 2025, ['Gabriel Mascaro']),
+    'sentimental-value': ('Sentimental Value', 2025, ['Joachim Trier']),
   };
   for (final e in films.entries) {
-    final f = e.value;
+    final (title, year, directors) = e.value;
     await _writeDoc('movies/${e.key}', {
-      'title': f.title,
-      'synopsis': f.synopsis,
-      'runtimeMinutes': f.runtime,
-      'rating': f.rating,
-      'releaseYear': f.year,
-      'genres': f.genres,
-      'directors': f.directors,
-      'cast': f.cast,
+      'title': title,
+      'synopsis': null,
+      'runtimeMinutes': null,
+      'rating': null,
+      'releaseYear': year,
+      'genres': <String>[],
+      'directors': directors,
+      'cast': <String>[],
       'poster': null,
       'createdAt': now,
       'updatedAt': now,
     });
   }
 
-  Map<String, Object?> movieSnap(String id) {
-    final f = films[id]!;
-    return {'title': f.title, 'posterUrl': null, 'runtimeMinutes': f.runtime, 'genres': f.genres};
+  var count = 0;
+  Future<void> screening(String movieId, DateTime start, {required String programme, int? price, Map<String, Object?> holds = const {}}) {
+    count++;
+    final title = films[movieId]!.$1;
+    return _writeDoc('screenings/$movieId-${start.toIso8601String().substring(0, 10)}', {
+      'eventTitle': title,
+      'movieId': movieId,
+      'movie': {'title': title, 'posterUrl': null, 'runtimeMinutes': null, 'genres': [programme]},
+      'startAt': start,
+      'endAt': start.add(const Duration(hours: 2)),
+      'type': price == null ? 'free' : 'paid',
+      'priceCentavos': price,
+      'capacity': seatLabels.length,
+      'seatHolds': holds,
+      'hasReservations': holds.isNotEmpty,
+      'createdBy': 'seed',
+      'createdAt': now,
+      'updatedAt': now,
+    });
   }
 
-  Future<void> screening(String id, String title, Duration startsIn, {String? movieId, int? price, Map<String, Object?> holds = const {}}) =>
-      _writeDoc('screenings/$id', {
-        'eventTitle': title,
-        'movieId': movieId,
-        'movie': movieId == null ? null : movieSnap(movieId),
-        'startAt': at(startsIn),
-        'endAt': at(startsIn + const Duration(hours: 2)),
-        'type': price == null ? 'free' : 'paid',
-        'priceCentavos': price,
-        'capacity': seatLabels.length,
-        'seatHolds': holds,
-        'hasReservations': holds.isNotEmpty,
-        'createdBy': 'seed',
-        'createdAt': now,
-        'updatedAt': now,
-      });
+  // A few seats already taken, so the seat map looks lived-in.
+  Map<String, Object?> taken(List<String> seats) =>
+      {for (final l in seats) l: {'reservationId': 'demo-${seats.first}', 'state': 'confirmed', 'expiresAt': null}};
 
-  await screening('sample-today', 'Lungsod ng Ulan', const Duration(hours: 6), movieId: 'sample-film-1');
-  await screening('sample-tomorrow-paid', 'Dagat at Liwanag: Special Screening', const Duration(days: 1, hours: 3),
-      movieId: 'sample-film-2', price: 15000, holds: {
-        'A1': {'reservationId': 'sample-r1', 'state': 'confirmed', 'expiresAt': null},
-        'A2': {'reservationId': 'sample-r1', 'state': 'confirmed', 'expiresAt': null},
-        'B5': {'reservationId': 'sample-r2', 'state': 'held', 'expiresAt': now.add(const Duration(minutes: 10))},
-        'C7': {'reservationId': 'sample-r3', 'state': 'held', 'expiresAt': now.subtract(const Duration(minutes: 5))},
-      });
-  await screening('sample-festival', 'Short Film Showcase (sample)', const Duration(days: 3, hours: 2));
-  await screening('sample-sold-out', 'Lungsod ng Ulan: Encore', const Duration(days: 5, hours: 4),
-      movieId: 'sample-film-1', price: 20000, holds: {
-        for (final l in seatLabels) l: {'reservationId': 'sample-full', 'state': 'confirmed', 'expiresAt': null},
-      });
-  await screening('sample-started', 'Already Started (hidden)', const Duration(minutes: -30));
-  stdout.writeln('  sample catalog: ${films.length} films, 5 screenings');
+  // Pamanang Pelikula: LVN Pictures (free)
+  await screening('malvarosa', at(0, 13), programme: lvn, holds: taken(['E5', 'E6', 'E7']));
+  await screening('biyaya-ng-lupa', at(0, 15), programme: lvn);
+  await screening('anak-dalita', at(1, 13), programme: lvn);
+  await screening('sumpaan', at(1, 15), programme: lvn);
+  // Pamanang Pelikula: Nora Aunor (free)
+  await screening('banaue', at(2, 15), programme: nora);
+  await screening('himala', at(5, 17), programme: nora, holds: {
+    for (final l in seatLabels.take(112)) l: {'reservationId': 'demo-himala', 'state': 'confirmed', 'expiresAt': null},
+  });
+  // FDCP Presents: world cinema (₱150)
+  await screening('dont-tell-mother', at(3, 13), programme: world, price: 15000);
+  await screening('it-was-just-an-accident', at(3, 15), programme: world, price: 15000, holds: taken(['D6', 'D7']));
+  await screening('case-137', at(3, 17), programme: world, price: 15000);
+  await screening('the-secret-agent', at(4, 12), programme: world, price: 15000);
+  await screening('sound-of-falling', at(4, 15), programme: world, price: 15000);
+  await screening('resurrection', at(6, 12), programme: world, price: 15000);
+  await screening('the-blue-trail', at(6, 15), programme: world, price: 15000);
+  await screening('sentimental-value', at(6, 17), programme: world, price: 15000, holds: taken(['F5', 'F6', 'F7', 'F8']));
+  stdout.writeln('  demo catalog: Cinematheque Davao lineup (FDCP, May 2026) — ${films.length} films, $count screenings');
 }
 
 Future<void> _clear() async {

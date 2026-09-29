@@ -11,8 +11,11 @@ import '../widgets/booking_steps.dart';
 import '../widgets/brand.dart';
 import '../widgets/state_views.dart';
 
-/// Step 2 of booking: who is booking, and who sits in each seat. Submitting creates the
-/// reservation on the server (which re-checks the seats and every field).
+/// Step 2 of booking: who sits in each seat, in one list. The first seat is the primary
+/// booker — their email receives the booking reference and e-ticket. Every moviegoer gives
+/// the same details (as on the Cinematheque logsheet); only the middle name, senior card
+/// number and PWD are optional. Submitting creates the reservation on the server, which
+/// re-checks the seats and every field.
 class ReservationDetailsScreen extends StatefulWidget {
   const ReservationDetailsScreen({super.key, required this.screeningId, required this.seats});
 
@@ -48,6 +51,13 @@ final _phonePattern = RegExp(r'^[0-9+()\-\s]{7,20}$');
 String? _required(String? v) => (v ?? '').trim().isEmpty ? 'Required' : null;
 String? _name(String? v) => _required(v) ?? ((v!.trim().length > 50) ? 'Use at most 50 characters' : null);
 String? _optionalName(String? v) => (v ?? '').trim().length > 50 ? 'Use at most 50 characters' : null;
+String? _age(String? v) {
+  final t = (v ?? '').trim();
+  if (t.isEmpty) return 'Required';
+  final n = int.tryParse(t);
+  return n == null || n < 0 || n > 120 ? '0–120' : null;
+}
+
 String? _phone(String? v, {bool required = false}) {
   final t = (v ?? '').trim();
   if (t.isEmpty) return required ? 'Required' : null;
@@ -62,9 +72,7 @@ String? _email(String? v, {bool required = false}) {
 
 class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _booker = _PersonFields();
   late final Map<String, _PersonFields> _attendees = {for (final s in widget.seats) s: _PersonFields()};
-  String? _bookerSeat;
   bool _busy = false;
   List<String> _serverErrors = const [];
   Stream<Screening?>? _screening;
@@ -77,23 +85,10 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
 
   @override
   void dispose() {
-    _booker.dispose();
     for (final a in _attendees.values) {
       a.dispose();
     }
     super.dispose();
-  }
-
-  /// "This seat is mine" copies the booker's name into that seat.
-  void _setBookerSeat(String? seat) {
-    setState(() => _bookerSeat = seat);
-    if (seat == null) return;
-    final a = _attendees[seat]!;
-    a.first.text = _booker.first.text;
-    a.middle.text = _booker.middle.text;
-    a.last.text = _booker.last.text;
-    a.contact.text = _booker.contact.text;
-    a.email.text = _booker.email.text;
   }
 
   String? _clean(TextEditingController c) {
@@ -101,16 +96,19 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     return t.isEmpty ? null : t;
   }
 
+  /// The first seat's moviegoer is the primary booker.
+  _PersonFields get _primary => _attendees[widget.seats.first]!;
+
   ReservationRequest _request() => ReservationRequest(
         screeningId: widget.screeningId,
         seats: widget.seats,
-        bookerSeat: _bookerSeat,
+        bookerSeat: widget.seats.first,
         booker: {
-          'firstName': _clean(_booker.first),
-          'middleName': _clean(_booker.middle),
-          'lastName': _clean(_booker.last),
-          'contactNo': _clean(_booker.contact),
-          'email': _clean(_booker.email),
+          'firstName': _clean(_primary.first),
+          'middleName': _clean(_primary.middle),
+          'lastName': _clean(_primary.last),
+          'contactNo': _clean(_primary.contact),
+          'email': _clean(_primary.email),
         },
         attendees: {
           for (final e in _attendees.entries)
@@ -197,8 +195,8 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
     }
   }
 
-  /// "booker.email" → "Your email", "attendees.A2.firstName" → "Seat A2 — first name".
-  static String _fieldLabel(String key) {
+  /// "booker.email" / "attendees.A2.firstName" → "Seat A2 — first name".
+  String _fieldLabel(String key) {
     const names = {
       'firstName': 'first name',
       'middleName': 'middle name',
@@ -212,7 +210,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
       'isPwd': 'PWD',
     };
     final parts = key.split('.');
-    if (parts.first == 'booker' && parts.length == 2) return 'Your ${names[parts[1]] ?? parts[1]}';
+    if (parts.first == 'booker' && parts.length == 2) return 'Seat ${widget.seats.first} — ${names[parts[1]] ?? parts[1]}';
     if (parts.first == 'attendees' && parts.length == 3) return 'Seat ${parts[1]} — ${names[parts[2]] ?? parts[2]}';
     if (parts.first == 'attendees' && parts.length == 2) return 'Seat ${parts[1]}';
     return switch (key) { 'seats' => 'Seats', 'bookerSeat' => 'Your seat', _ => 'Booking' };
@@ -241,7 +239,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
           body = _form(screening);
         }
         return Scaffold(
-          appBar: AppBar(title: const Text('Your details')),
+          appBar: AppBar(title: const Text("Who's coming?")),
           body: body,
           bottomNavigationBar: screening == null ? null : _submitBar(screening),
         );
@@ -268,36 +266,9 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                   _ErrorBox(messages: _serverErrors),
                 ],
                 const SizedBox(height: Space.xxl),
-                const _SectionHeader(
-                  title: 'Your details',
-                  subtitle: 'Your booking reference and e-ticket are sent to this email.',
-                ),
-                ..._plain([
-                  _field(_booker.first, 'First name', validator: _name, capitalize: true, autofill: AutofillHints.givenName),
-                  _field(_booker.middle, 'Middle name (optional)', validator: _optionalName, capitalize: true, autofill: AutofillHints.middleName),
-                  _field(_booker.last, 'Last name', validator: _name, capitalize: true, autofill: AutofillHints.familyName),
-                  _field(_booker.contact, 'Contact number',
-                      validator: (v) => _phone(v, required: true), keyboard: TextInputType.phone, autofill: AutofillHints.telephoneNumber),
-                  _field(_booker.email, 'Email',
-                      validator: (v) => _email(v, required: true), keyboard: TextInputType.emailAddress, autofill: AutofillHints.email),
-                ]),
-                const SizedBox(height: 16),
-                DropdownButtonFormField<String?>(
-                  isExpanded: true, // long options are shortened with … instead of overflowing
-                  dropdownColor: CustomerColors.surface,
-                  borderRadius: BorderRadius.circular(Radii.md),
-                  initialValue: _bookerSeat,
-                  decoration: const InputDecoration(labelText: 'Which seat is yours?'),
-                  items: [
-                    const DropdownMenuItem<String?>(value: null, child: Text("I'm not attending / booking for others")),
-                    for (final s in seats) DropdownMenuItem<String?>(value: s, child: Text('Seat $s is mine')),
-                  ],
-                  onChanged: _busy ? null : _setBookerSeat,
-                ),
-                const SizedBox(height: Space.xxl),
                 _SectionHeader(
                   title: seats.length == 1 ? 'Who is using the seat?' : 'Who is using each seat?',
-                  subtitle: 'One person per seat, as on the Cinematheque logsheet.',
+                  subtitle: 'One person per seat, as on the Cinematheque logsheet. The first seat is you, the primary booker.',
                 ),
                 for (final seat in seats) ...[_attendeeCard(seat), const SizedBox(height: 12)],
               ],
@@ -310,13 +281,18 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
 
   Widget _attendeeCard(String seat) {
     final a = _attendees[seat]!;
+    final primary = seat == widget.seats.first;
     return Card(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
+            // Wraps rather than overflowing on narrow phones / large text sizes.
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -327,81 +303,78 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                   ),
                   child: Text('Seat $seat', style: CcdType.display(15, spacing: 0.6)),
                 ),
-                if (_bookerSeat == seat) ...[
-                  const SizedBox(width: 8),
+                if (primary)
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                     decoration: BoxDecoration(color: CustomerColors.ink, borderRadius: BorderRadius.circular(Radii.pill)),
-                    child: const Text('You', style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
-                  ),
-                ],
+                    child: const Text('You · primary booker',
+                        style: TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w600)),
+                  )
+                else
+                  const Text('Guest', style: TextStyle(color: CustomerColors.muted, fontSize: 12.5, fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: 8),
-            _field(a.first, 'First name', validator: _name, capitalize: true),
-            _field(a.middle, 'Middle name (optional)', validator: _optionalName, capitalize: true),
-            _field(a.last, 'Last name', validator: _name, capitalize: true),
-            Theme(
-              data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-              child: ExpansionTile(
-                tilePadding: EdgeInsets.zero,
-                childrenPadding: const EdgeInsets.only(bottom: 8),
-                title: const Text('More details (optional)', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Age, sex, school or company, contact, senior / PWD', style: TextStyle(fontSize: 12)),
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(
-                        child: _field(a.age, 'Age', keyboard: TextInputType.number, validator: (v) {
-                          final t = (v ?? '').trim();
-                          if (t.isEmpty) return null;
-                          final n = int.tryParse(t);
-                          return n == null || n < 0 || n > 120 ? '0–120' : null;
-                        }),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 12),
-                          child: DropdownButtonFormField<String?>(
-                            isExpanded: true,
-                            dropdownColor: CustomerColors.surface,
-                            borderRadius: BorderRadius.circular(Radii.md),
-                            initialValue: a.sex,
-                            decoration: const InputDecoration(labelText: 'Sex'),
-                            items: const [
-                              DropdownMenuItem(value: null, child: Text('—')),
-                              DropdownMenuItem(value: 'M', child: Text('Male')),
-                              DropdownMenuItem(value: 'F', child: Text('Female')),
-                            ],
-                            onChanged: (v) => setState(() => a.sex = v),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  _field(a.company, 'School or company', validator: (v) => (v ?? '').trim().length > 150 ? 'Too long' : null),
-                  _field(a.contact, 'Contact number', validator: _phone, keyboard: TextInputType.phone),
-                  _field(a.email, 'Email', validator: _email, keyboard: TextInputType.emailAddress),
-                  _field(a.senior, 'Senior citizen card no.', validator: (v) => (v ?? '').trim().length > 30 ? 'Too long' : null),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text('Person with disability (PWD)'),
-                    value: a.isPwd,
-                    onChanged: (v) => setState(() => a.isPwd = v),
-                  ),
-                ],
+            if (primary) ...[
+              const SizedBox(height: 6),
+              const Text(
+                'Your booking reference and e-ticket go to the email below.',
+                style: TextStyle(color: CustomerColors.muted, fontSize: 12.5, height: 1.4),
               ),
+            ],
+            _field(a.first, 'First name', validator: _name, capitalize: true, autofill: primary ? AutofillHints.givenName : null),
+            _field(a.middle, 'Middle name (optional)',
+                validator: _optionalName, capitalize: true, autofill: primary ? AutofillHints.middleName : null),
+            _field(a.last, 'Last name', validator: _name, capitalize: true, autofill: primary ? AutofillHints.familyName : null),
+            _field(a.contact, 'Mobile number',
+                validator: (v) => _phone(v, required: true),
+                keyboard: TextInputType.phone,
+                autofill: primary ? AutofillHints.telephoneNumber : null),
+            _field(a.email, 'Email',
+                validator: (v) => _email(v, required: true),
+                keyboard: TextInputType.emailAddress,
+                autofill: primary ? AutofillHints.email : null),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: _field(a.age, 'Age', keyboard: TextInputType.number, validator: _age)),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: 12),
+                    child: DropdownButtonFormField<String>(
+                      isExpanded: true,
+                      dropdownColor: CustomerColors.surface,
+                      borderRadius: BorderRadius.circular(Radii.md),
+                      initialValue: a.sex,
+                      decoration: const InputDecoration(labelText: 'Sex'),
+                      items: const [
+                        DropdownMenuItem(value: 'M', child: Text('Male')),
+                        DropdownMenuItem(value: 'F', child: Text('Female')),
+                      ],
+                      validator: (v) => v == null ? 'Required' : null,
+                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      onChanged: _busy ? null : (v) => setState(() => a.sex = v),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            _field(a.company, 'School or company',
+                validator: (v) => _required(v) ?? ((v!.trim().length > 150) ? 'Use at most 150 characters' : null)),
+            _field(a.senior, 'Senior citizen card no. (optional)',
+                validator: (v) => (v ?? '').trim().length > 30 ? 'Use at most 30 characters' : null),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Person with disability (PWD)'),
+              subtitle: const Text('Optional', style: TextStyle(fontSize: 12)),
+              value: a.isPwd,
+              onChanged: _busy ? null : (v) => setState(() => a.isPwd = v),
             ),
           ],
         ),
       ),
     );
   }
-
-  /// Booker fields sit directly on the page (a card around outlined fields looks doubled).
-  List<Widget> _plain(List<Widget> children) => children;
 
   Widget _field(
     TextEditingController controller,

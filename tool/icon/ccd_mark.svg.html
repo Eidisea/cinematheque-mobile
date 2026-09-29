@@ -1,0 +1,68 @@
+<!doctype html>
+<!--
+  Cinematheque Centre Davao — the brand mark: a gold CD monogram, with a short ticket
+  perforation in the mouth of the C. It is the launcher icon, the hero of the splash and
+  (drawn smaller) the in-app logo. Keep the numbers in sync with lib/customer/widgets/ccd_mark.dart.
+
+  Mark geometry lives in a 100×100 box. Icon layers use Android's 108-unit adaptive canvas
+  (the launcher shows the middle 72×72; the safe zone is the central 66-unit circle).
+  The page renders ONE layer at ONE size, chosen by the URL hash:
+    #layer=background|foreground|monochrome|legacy|splash&size=432
+  tool/icon/render_icon.ps1 renders every layer at every density.
+-->
+<html><head><meta charset="utf-8">
+<style>
+html,body{margin:0;background:transparent;overflow:hidden}
+svg{display:block}
+</style></head><body>
+<svg id="art" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108">
+  <defs>
+    <!-- Cinema-dark: near-black ink with the faintest warm lift in the middle. -->
+    <radialGradient id="dark" cx=".5" cy=".46" r=".72">
+      <stop offset="0" stop-color="#1E1A1F"/><stop offset=".65" stop-color="#141219"/><stop offset="1" stop-color="#0B0A0D"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#EBBC00"/><stop offset="1" stop-color="#CC8500"/>
+    </linearGradient>
+    <!-- The mark, in its 100-unit box. -->
+    <g id="mark">
+      <path d="M48.85 35.86 A22 22 0 1 0 48.85 64.14" fill="none" stroke-width="9.5" stroke-linecap="butt"/>
+      <path d="M62 28 V72 M57.25 28 H66 A22 22 0 0 1 66 72 H57.25" fill="none" stroke-width="9.5" stroke-linecap="butt" stroke-linejoin="miter"/>
+      <g stroke="none"><circle cx="52.8" cy="40.5" r="1.55"/><circle cx="52.8" cy="46.8" r="1.55"/><circle cx="52.8" cy="53.2" r="1.55"/><circle cx="52.8" cy="59.5" r="1.55"/></g>
+    </g>
+  </defs>
+
+  <g id="background"><rect width="108" height="108" fill="url(#dark)"/></g>
+
+  <!-- 62 units wide: inside the 66-unit safe circle whatever the launcher's mask. -->
+  <g id="foreground" transform="translate(54 54) scale(.66) translate(-50 -50)">
+    <use href="#mark" stroke="url(#gold)" fill="url(#gold)"/>
+  </g>
+  <g id="monochrome" transform="translate(54 54) scale(.66) translate(-50 -50)">
+    <use href="#mark" stroke="#FFFFFF" fill="#FFFFFF"/>
+  </g>
+</svg>
+<script>
+  const q = new URLSearchParams(location.hash.slice(1));
+  const layer = q.get('layer') || 'legacy', size = +(q.get('size') || 432);
+  const svg = document.getElementById('art');
+  svg.setAttribute('width', size); svg.setAttribute('height', size);
+  const show = { background: ['background'], foreground: ['foreground'], monochrome: ['monochrome'],
+                 legacy: ['background', 'foreground'], splash: ['foreground'] }[layer];
+  for (const id of ['background', 'foreground', 'monochrome']) document.getElementById(id).style.display = show.includes(id) ? '' : 'none';
+  if (layer === 'legacy') {
+    // Pre-Android-8 / store icon: the visible 72-unit middle, as a rounded square.
+    svg.setAttribute('viewBox', '18 18 72 72');
+    const ns = 'http://www.w3.org/2000/svg', cp = document.createElementNS(ns, 'clipPath'), r = document.createElementNS(ns, 'rect');
+    cp.id = 'round'; Object.entries({ x: 18, y: 18, width: 72, height: 72, rx: 16 }).forEach(([k, v]) => r.setAttribute(k, v));
+    cp.appendChild(r); svg.querySelector('defs').appendChild(cp);
+    const g = document.createElementNS(ns, 'g'); g.setAttribute('clip-path', 'url(#round)');
+    [...svg.children].filter(c => c.tagName !== 'defs').forEach(c => g.appendChild(c)); svg.appendChild(g);
+  }
+  if (layer === 'splash') {
+    // Android splash icon canvas (288dp): the mark small — about as wide as it looks on
+    // the home screen (72dp) — so the Flutter intro can enlarge it from there.
+    svg.setAttribute('viewBox', `${54 - 124} ${54 - 124} 248 248`);
+  }
+</script>
+</body></html>

@@ -181,6 +181,20 @@ void main() {
       expect(find.textContaining('Seat C5 was just taken by someone else'), findsOneWidget);
     });
 
+    testWidgets('no "taken by someone else" message once the customer has moved on to their details', (tester) async {
+      // While the booking is being saved, the seat map (still open underneath the details
+      // form) sees the customer's OWN seats become taken. That must not be announced.
+      await openSeatMap(tester, screeningWith());
+      await tapSeat(tester, 'C4');
+      await tester.tap(find.widgetWithText(GoldButton, 'Continue'));
+      await tester.pumpAndSettle();
+      expect(find.text("Who's coming?"), findsWidgets);
+
+      live.add(screeningWith(holds: {'C4': freePending}));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('was just taken by someone else'), findsNothing);
+    });
+
     testWidgets('a cancelled booking frees its seats live', (tester) async {
       await openSeatMap(tester, screeningWith(holds: {'D1': confirmed}));
       expect(find.bySemanticsLabel('Seat D1, taken'), findsOneWidget);

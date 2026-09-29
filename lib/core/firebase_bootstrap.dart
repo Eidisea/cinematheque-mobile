@@ -17,6 +17,11 @@ import '../firebase_options.dart';
 const useEmulators = bool.fromEnvironment('USE_EMULATORS');
 const emulatorHost = String.fromEnvironment('EMULATOR_HOST', defaultValue: '127.0.0.1');
 
+/// A real phone on USB (`--dart-define=EMULATORS_OVER_USB=true`): it reaches this computer
+/// through `adb reverse` on its own 127.0.0.1. Without this, FlutterFire rewrites 127.0.0.1
+/// to 10.0.2.2 on Android — the address only the Android *emulator* uses for the computer.
+const emulatorsOverUsb = bool.fromEnvironment('EMULATORS_OVER_USB');
+
 /// Result of starting Firebase. Both apps start even if Firebase fails,
 /// so the problem can be shown on screen instead of a blank/crashed app.
 class FirebaseStartup {
@@ -33,14 +38,14 @@ Future<FirebaseStartup> startFirebase() async {
   try {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     if (useEmulators) {
-      await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099);
+      await FirebaseAuth.instance.useAuthEmulator(emulatorHost, 9099, automaticHostMapping: !emulatorsOverUsb);
       if (kIsWeb) {
         // A saved emulator login would be "restored" against the REAL Google servers on
         // the next page load, before the emulator switch applies. Not saving it keeps
         // emulator mode fully local. (Emulator mode only: reloading signs you out.)
         await FirebaseAuth.instance.setPersistence(Persistence.NONE);
       }
-      FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080);
+      FirebaseFirestore.instance.useFirestoreEmulator(emulatorHost, 8080, automaticHostMapping: !emulatorsOverUsb);
       debugPrint('Using LOCAL Firebase emulators at $emulatorHost');
     }
     return const FirebaseStartup.ready();

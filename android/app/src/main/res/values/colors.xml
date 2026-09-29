@@ -1,7 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Cinematheque ink: the launcher icon's background (gold mark on dark reads at any size). -->
-    <color name="ic_launcher_background">#141219</color>
-    <!-- Warm paper: the app's background, so launch → splash → app never flashes white. -->
+    <!-- Cinematheque ink, cinema-dark (the icon's background): the launch screen, so icon → splash → app
+         is one colour story. -->
+    <color name="ccd_ink">#141219</color>
+    <!-- Warm paper: the app's own background behind Flutter once it runs. -->
     <color name="ccd_paper">#FAF9F7</color>
 </resources>

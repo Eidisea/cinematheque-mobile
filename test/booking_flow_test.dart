@@ -179,22 +179,45 @@ Future<void> enter(WidgetTester tester, Finder f, String text) async {
   await tester.pump();
 }
 
-/// Fills the booker, marks A1 as theirs (copies the name), fills A2.
+/// A field inside one seat's card (the list is built lazily: scroll to it first).
+Finder seatField(String seat, String label) => find.descendant(
+      of: find.ancestor(of: find.text('Seat $seat'), matching: find.byType(Card)),
+      matching: field(label),
+    );
+
+final formScroll = find.byType(Scrollable).first;
+
+Future<void> enterIn(WidgetTester tester, String seat, String label, String text) async {
+  final f = seatField(seat, label);
+  await tester.scrollUntilVisible(f, 120, scrollable: formScroll);
+  await tester.enterText(f, text);
+  await tester.pump();
+}
+
+/// Fills one seat's card with every required detail.
+Future<void> fillSeat(WidgetTester tester, String seat, {required String first, required String email, required String sex}) async {
+  await enterIn(tester, seat, 'First name', first);
+  await enterIn(tester, seat, 'Last name', 'Dela Cruz');
+  await enterIn(tester, seat, 'Mobile number', '0917 123 4567');
+  await enterIn(tester, seat, 'Email', email);
+  await enterIn(tester, seat, 'Age', '30');
+  final sexField = find.descendant(
+    of: find.ancestor(of: find.text('Seat $seat'), matching: find.byType(Card)),
+    matching: find.byType(DropdownButtonFormField<String>),
+  );
+  await tester.ensureVisible(sexField); // to the top of the view: clear of the sticky Reserve bar
+  await tester.pumpAndSettle();
+  await tester.tap(sexField);
+  await tester.pumpAndSettle();
+  await tester.tap(find.text(sex).last);
+  await tester.pumpAndSettle();
+  await enterIn(tester, seat, 'School or company', 'Ateneo de Davao');
+}
+
+/// Seat A1 is the primary booker (Juan); A2 is a guest (Maria).
 Future<void> fillValidForm(WidgetTester tester) async {
-  await enter(tester, field('First name').at(0), 'Juan');
-  await enter(tester, field('Last name').at(0), 'Dela Cruz');
-  await enter(tester, field('Contact number').first, '0917 123 4567');
-  await enter(tester, field('Email').first, 'juan@example.com');
-
-  await tester.ensureVisible(find.text("I'm not attending / booking for others"));
-  await tester.tap(find.text("I'm not attending / booking for others"));
-  await tester.pumpAndSettle();
-  await tester.tap(find.text('Seat A1 is mine').last);
-  await tester.pumpAndSettle();
-
-  // Seat A2's name fields are the 3rd set of first/last name fields.
-  await enter(tester, field('First name').at(2), 'Maria');
-  await enter(tester, field('Last name').at(2), 'Dela Cruz');
+  await fillSeat(tester, 'A1', first: 'Juan', email: 'juan@example.com', sex: 'Male');
+  await fillSeat(tester, 'A2', first: 'Maria', email: 'maria@example.com', sex: 'Female');
 }
 
 Future<void> submit(WidgetTester tester) async {
@@ -207,18 +230,27 @@ void main() {
     testWidgets('free booking end to end: form → server → saved on phone → booking screen', (tester) async {
       final h = await pumpApp(tester);
       await openDetailsForm(tester);
-      expect(find.text('Your details'), findsWidgets);
+      expect(find.text("Who's coming?"), findsWidgets);
+      expect(find.text('You · primary booker'), findsOneWidget, reason: 'the first seat is the booker');
+      expect(find.text('Guest'), findsOneWidget);
 
       await fillValidForm(tester);
       await submit(tester);
 
       final r = h.api.lastRequest!;
       expect(r.seats, ['A1', 'A2']);
-      expect(r.bookerSeat, 'A1');
+      expect(r.bookerSeat, 'A1', reason: 'the first seat is always the primary booker');
+      expect(r.booker['firstName'], 'Juan');
       expect(r.booker['email'], 'juan@example.com');
       expect(r.booker['middleName'], isNull, reason: 'empty optional text is sent as null');
-      expect(r.attendees['A1']!['firstName'], 'Juan', reason: '"Seat A1 is mine" copied the name');
-      expect(r.attendees['A2']!['firstName'], 'Maria');
+      expect(r.attendees['A1']!['firstName'], 'Juan');
+      expect(r.attendees['A2']!, containsPair('firstName', 'Maria'));
+      expect(r.attendees['A2']!, containsPair('email', 'maria@example.com'));
+      expect(r.attendees['A2']!, containsPair('age', 30));
+      expect(r.attendees['A2']!, containsPair('sex', 'F'));
+      expect(r.attendees['A2']!, containsPair('companySchool', 'Ateneo de Davao'));
+      expect(r.attendees['A2']!['seniorCardNo'], isNull, reason: 'optional');
+      expect(r.attendees['A2']!['isPwd'], isFalse);
 
       expect(h.saved.bookings.single.bookingReference, 'CCD-7KQ2M9XA');
       expect(find.text('Reservation received'), findsOneWidget);
@@ -229,7 +261,7 @@ void main() {
     testWidgets('missing / invalid fields are highlighted and nothing is sent', (tester) async {
       final h = await pumpApp(tester);
       await openDetailsForm(tester);
-      await enter(tester, field('Email').first, 'not-an-email');
+      await enterIn(tester, 'A1', 'Email', 'not-an-email');
       await submit(tester);
       expect(h.api.lastRequest, isNull);
       expect(find.text('Please check the highlighted fields.'), findsOneWidget);

@@ -5,6 +5,7 @@ import 'package:intl/intl.dart' show DateFormat;
 
 import '../../core/formatting.dart';
 import '../theme/customer_theme.dart';
+import 'ccd_mark.dart';
 
 // ---------------------------------------------------------------------------
 // Ticket shape — FDCP presents screenings as tear-off tickets: a date stub, a
@@ -370,51 +371,15 @@ class _SkylinePainter extends CustomPainter {
   bool shouldRepaint(_SkylinePainter old) => old.color != color;
 }
 
-/// The Laravel wordmark: a film frame holding a mountain ridge, in gold.
+/// The in-app logo: the Cinematheque CD mark (the same mark as the launcher icon and the
+/// splash), in gold. The perforation is left out where it would be too small to read.
 class BrandMark extends StatelessWidget {
   const BrandMark({super.key, this.size = 36});
 
   final double size;
 
   @override
-  Widget build(BuildContext context) =>
-      ExcludeSemantics(child: SizedBox.square(dimension: size, child: CustomPaint(painter: _MarkPainter())));
-}
-
-class _MarkPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final s = size.width / 40;
-    final gold = Paint()..color = CustomerColors.gold600;
-    final stroke = Paint()
-      ..color = CustomerColors.gold600
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.4 * s;
-    canvas.drawRRect(RRect.fromLTRBR(2 * s, 4 * s, 38 * s, 36 * s, Radius.circular(6 * s)), stroke);
-    for (final x in [6.0, 31.0]) {
-      for (final y in [8.0, 18.5, 29.0]) {
-        canvas.drawRRect(RRect.fromLTRBR(x * s, y * s, (x + 3) * s, (y + 3) * s, Radius.circular(s)), gold);
-      }
-    }
-    final ridge = Path()
-      ..moveTo(11 * s, 28 * s)
-      ..lineTo(16.5 * s, 19 * s)
-      ..lineTo(19.5 * s, 23 * s)
-      ..lineTo(23 * s, 15 * s)
-      ..lineTo(29 * s, 28 * s)
-      ..close();
-    canvas.drawPath(ridge, Paint()..color = CustomerColors.purple);
-    canvas.drawPath(
-        ridge,
-        Paint()
-          ..color = CustomerColors.gold600
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 1.2 * s
-          ..strokeJoin = StrokeJoin.round);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) => ExcludeSemantics(child: CcdMark(size: size, perforation: size >= 30));
 }
 
 /// Generated poster art for films without a real poster (as on the Laravel site): a

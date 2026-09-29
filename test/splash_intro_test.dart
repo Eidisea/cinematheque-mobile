@@ -1,6 +1,7 @@
 import 'package:ccd_mobile/core/clock.dart';
 import 'package:ccd_mobile/core/firebase_bootstrap.dart';
 import 'package:ccd_mobile/customer/customer_app.dart';
+import 'package:ccd_mobile/customer/widgets/ccd_mark.dart';
 import 'package:ccd_mobile/customer/widgets/splash_intro.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -18,12 +19,12 @@ Future<void> pumpApp(WidgetTester tester, {bool reducedMotion = false}) async {
 }
 
 void main() {
-  testWidgets('the title card plays once over Screenings, then leaves', (tester) async {
+  testWidgets('the intro plays once over Screenings, the ticket tears, and it leaves', (tester) async {
     await pumpApp(tester);
     expect(find.byType(SplashIntro), findsOneWidget);
 
     // Mid-way: the name is being revealed over the page that is already loading beneath.
-    await tester.pump(const Duration(milliseconds: 900));
+    await tester.pump(const Duration(milliseconds: 1100));
     expect(find.text('CINEMATHEQUE'), findsWidgets);
     expect(find.descendant(of: find.byType(SplashIntro), matching: find.text('CENTRE DAVAO')), findsOneWidget);
 
@@ -36,8 +37,8 @@ void main() {
     await pumpApp(tester);
     await tester.pump(const Duration(milliseconds: 200));
     await tester.tap(find.byType(SplashIntro));
-    await tester.pump(); // the fade starts
-    await tester.pump(const Duration(milliseconds: 400)); // …and ends, long before the card would have
+    await tester.pump(); // straight to the tear
+    await tester.pump(const Duration(milliseconds: 500)); // …done long before the card would have been
     await tester.pump();
     expect(find.byType(SplashIntro), findsNothing);
   });
@@ -46,18 +47,21 @@ void main() {
     await pumpApp(tester, reducedMotion: true);
     await tester.pump();
     expect(find.text('AN FDCP CINEMATHEQUE CENTRE'), findsOneWidget);
-    await tester.pump(const Duration(milliseconds: 550)); // held
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 250)); // quick fade
+    await tester.pump(const Duration(milliseconds: 850)); // held, then a plain fade
     await tester.pump();
     expect(find.byType(SplashIntro), findsNothing);
   });
 
-  testWidgets('it starts exactly where the Android splash leaves the mark: 96dp wide, centred', (tester) async {
+  testWidgets('it starts exactly where the Android splash leaves the mark: icon-sized, centred', (tester) async {
     await pumpApp(tester);
-    final box = tester.getRect(find.descendant(of: find.byType(SplashIntro), matching: find.byType(Transform)).first);
-    expect(box.center, const Offset(412 / 2, 915 / 2));
-    expect(box.width * 36 / 40, closeTo(96, 0.01));
+    final mark = tester.getRect(find.descendant(of: find.byType(SplashIntro), matching: find.byType(CcdMark)).first);
+    expect(mark.center, const Offset(412 / 2, 915 / 2));
+    expect(mark.width, closeTo(SplashIntro.markStart, 0.01));
+
+    // …and is brought forward to hero size before the ticket arrives.
+    await tester.pump(const Duration(milliseconds: 650));
+    final hero = tester.getRect(find.descendant(of: find.byType(SplashIntro), matching: find.byType(CcdMark)).first);
+    expect(hero.width, closeTo(SplashIntro.markHero, 1));
     await tester.pumpAndSettle();
   });
 }

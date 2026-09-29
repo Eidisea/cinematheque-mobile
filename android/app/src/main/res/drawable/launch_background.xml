@@ -1,7 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Android 7–11 launch screen: warm paper with the Cinematheque mark, centred exactly
-     where the Android 12+ splash and the Flutter intro place it. -->
+<!-- Android 7–11 launch screen: cinema-dark ink and the CD mark, small, centred exactly where
+     the Android 12+ splash and the Flutter intro place it (a 288dp canvas). The Flutter intro
+     enlarges the mark from there. -->
 <layer-list xmlns:android="http://schemas.android.com/apk/res/android">
-    <item android:drawable="@color/ccd_paper"/>
-    <item android:drawable="@drawable/splash_mark" android:gravity="center" android:width="288dp" android:height="288dp"/>
+    <item android:drawable="@color/ccd_ink"/>
+    <item>
+        <bitmap android:gravity="center" android:src="@drawable/splash_mark"/>
+    </item>
 </layer-list>

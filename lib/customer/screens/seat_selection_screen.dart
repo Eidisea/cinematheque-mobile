@@ -96,7 +96,10 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     }
     final (next, lost) = current.refresh(screening: screening, layout: layout, now: now);
     setState(() => _map = next);
-    if (lost.isNotEmpty) {
+    // Only warn while the seat map is the screen in front. Once the customer has moved on
+    // to the details form, a change here is usually their OWN booking claiming the seats;
+    // real conflicts are reported by the server when they submit.
+    if (lost.isNotEmpty && (ModalRoute.of(context)?.isCurrent ?? true)) {
       _toast(lost.length == 1
           ? 'Seat ${lost.first} was just taken by someone else, so it was removed from your selection.'
           : 'Seats ${lost.join(', ')} were just taken by someone else, so they were removed from your selection.');

@@ -1,10 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Android 12+: the system splash screen — warm paper and the Cinematheque mark. -->
+    <!-- Android 12+: the system splash screen — cinema-dark ink and the CD mark, small.
+         The Flutter intro enlarges the mark from there. -->
     <style name="LaunchTheme" parent="@android:style/Theme.Light.NoTitleBar">
-        <item name="android:windowSplashScreenBackground">@color/ccd_paper</item>
+        <item name="android:windowSplashScreenBackground">@color/ccd_ink</item>
         <item name="android:windowSplashScreenAnimatedIcon">@drawable/splash_mark</item>
-        <item name="android:windowBackground">@color/ccd_paper</item>
+        <item name="android:windowBackground">@color/ccd_ink</item>
     </style>
     <style name="NormalTheme" parent="@android:style/Theme.Light.NoTitleBar">
         <item name="android:windowBackground">@color/ccd_paper</item>

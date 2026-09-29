@@ -44,7 +44,16 @@ async function reset() {
 }
 
 const booker = { firstName: 'Juan', middleName: '', lastName: 'Dela Cruz', contactNo: '0917 123 4567', email: 'Juan@Example.com' };
-const attendee = (first) => ({ firstName: first, lastName: 'Dela Cruz', age: 30, sex: 'M', isPwd: false });
+const attendee = (first) => ({
+  firstName: first,
+  lastName: 'Dela Cruz',
+  age: 30,
+  sex: 'M',
+  companySchool: 'Ateneo de Davao',
+  contactNo: '09171234567',
+  email: `${first.toLowerCase()}@example.com`,
+  isPwd: false,
+});
 const request = (over = {}) => ({
   screeningId: 'free1',
   seats: ['A1', 'A2'],
@@ -108,6 +117,16 @@ describe('validation (server side)', () => {
     const { errors } = validateCreateReservation(request({ attendees: { A1: attendee('Juan'), A2: bad } }));
     assert.ok(errors['attendees.A2.age']);
     assert.ok(errors['attendees.A2.sex']);
+  });
+
+  test('every moviegoer gives age, sex, school/company, mobile and email; senior card and PWD stay optional', () => {
+    const bare = { firstName: 'Ana', lastName: 'Reyes' };
+    const { errors } = validateCreateReservation(request({ attendees: { A1: attendee('Juan'), A2: bare } }));
+    for (const f of ['age', 'sex', 'companySchool', 'contactNo', 'email']) assert.ok(errors[`attendees.A2.${f}`], f);
+    assert.equal(errors['attendees.A2.middleName'], undefined);
+    assert.equal(errors['attendees.A2.seniorCardNo'], undefined);
+    assert.equal(errors['attendees.A2.isPwd'], undefined);
+    assert.deepEqual(Object.keys(validateCreateReservation(request()).errors), []);
   });
 
   test('booking references are read forgivingly', () => {

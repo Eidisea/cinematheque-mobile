@@ -45,26 +45,29 @@ function person(errors, prefix, p, { bookerFields }) {
     return out;
   }
 
-  // Attendee (logsheet) details — all optional except the name.
+  // Attendee (logsheet) details: every moviegoer gives them. Only the middle name, the
+  // senior citizen card number and PWD are optional.
   let age = null;
-  if (o.age !== undefined && o.age !== null && o.age !== '') {
-    if (Number.isInteger(o.age) && o.age >= 0 && o.age <= 120) age = o.age;
-    else errors[`${prefix}.age`] = 'Enter an age from 0 to 120.';
-  }
+  if (o.age === undefined || o.age === null || o.age === '') errors[`${prefix}.age`] = 'This field is required.';
+  else if (Number.isInteger(o.age) && o.age >= 0 && o.age <= 120) age = o.age;
+  else errors[`${prefix}.age`] = 'Enter an age from 0 to 120.';
   let sex = null;
-  if (o.sex !== undefined && o.sex !== null && o.sex !== '') {
-    if (o.sex === 'M' || o.sex === 'F') sex = o.sex;
-    else errors[`${prefix}.sex`] = 'Invalid value.';
-  }
+  if (o.sex === undefined || o.sex === null || o.sex === '') errors[`${prefix}.sex`] = 'This field is required.';
+  else if (o.sex === 'M' || o.sex === 'F') sex = o.sex;
+  else errors[`${prefix}.sex`] = 'Invalid value.';
   if (o.isPwd !== undefined && o.isPwd !== null && typeof o.isPwd !== 'boolean') errors[`${prefix}.isPwd`] = 'Invalid value.';
 
   return {
     ...out,
     age,
     sex,
-    companySchool: text(errors, `${prefix}.companySchool`, o.companySchool, { max: 150 }),
-    contactNo: text(errors, `${prefix}.contactNo`, o.contactNo, { max: 20, pattern: PHONE, message: 'Enter a valid contact number.' }),
-    email: text(errors, `${prefix}.email`, o.email, { max: 100, pattern: EMAIL, message: 'Enter a valid email address.' }),
+    companySchool: text(errors, `${prefix}.companySchool`, o.companySchool, { required: true, max: 150 }),
+    contactNo: text(errors, `${prefix}.contactNo`, o.contactNo, {
+      required: true, max: 20, pattern: PHONE, message: 'Enter a valid contact number.',
+    }),
+    email: text(errors, `${prefix}.email`, o.email, {
+      required: true, max: 100, pattern: EMAIL, message: 'Enter a valid email address.',
+    }),
     seniorCardNo: text(errors, `${prefix}.seniorCardNo`, o.seniorCardNo, { max: 30 }),
     isPwd: o.isPwd === true,
   };
@@ -73,8 +76,8 @@ function person(errors, prefix, p, { bookerFields }) {
 /**
  * Body: { screeningId, seats: ["A1", …], bookerSeat?: "A1",
  *         booker: { firstName, middleName?, lastName, contactNo, email },
- *         attendees: { "A1": { firstName, middleName?, lastName, age?, sex?, companySchool?,
- *                              contactNo?, email?, seniorCardNo?, isPwd? }, … } }
+ *         attendees: { "A1": { firstName, middleName?, lastName, age, sex, companySchool,
+ *                              contactNo, email, seniorCardNo?, isPwd? }, … } }
  * Returns { value, errors } — errors is empty when valid.
  */
 export function validateCreateReservation(body) {
