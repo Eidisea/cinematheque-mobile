@@ -4,6 +4,7 @@ import 'package:ccd_mobile/api/booking_api.dart';
 import 'package:ccd_mobile/core/clock.dart';
 import 'package:ccd_mobile/core/firebase_bootstrap.dart';
 import 'package:ccd_mobile/customer/customer_app.dart';
+import 'package:ccd_mobile/customer/screens/booking_screen.dart';
 import 'package:ccd_mobile/customer/widgets/brand.dart';
 import 'package:ccd_mobile/customer/storage/saved_bookings.dart';
 import 'package:ccd_mobile/data/models/booking_view.dart';
@@ -123,6 +124,20 @@ class FakeApi implements BookingApi {
     cancelCalls++;
     views.push(accessKey, view(status: ReservationStatus.cancelled, reason: CancellationReason.customerCancelled));
   }
+
+  ApiException? failCheckoutWith;
+  int checkoutCalls = 0;
+  int refreshCalls = 0;
+
+  @override
+  Future<Uri?> startCheckout(String accessKey) async {
+    checkoutCalls++;
+    if (failCheckoutWith != null) throw failCheckoutWith!;
+    return Uri.parse('https://checkout.paymongo.test/cs_1');
+  }
+
+  @override
+  Future<void> refreshPayment(String accessKey) async => refreshCalls++;
 }
 
 class Harness {
@@ -329,9 +344,63 @@ void main() {
       expect(find.textContaining('held until 10:15 AM'), findsOneWidget);
     });
 
+    testWidgets('paid + pending: "Pay now" opens PayMongo; the payment is re-checked on opening', (tester) async {
+      final opened = <Uri>[];
+      final original = BookingScreen.openUrl;
+      BookingScreen.openUrl = (url) async {
+        opened.add(url);
+        return true;
+      };
+      addTearDown(() => BookingScreen.openUrl = original);
+
+      final h = await openBooking(tester, view(paid: true, expiresAt: now.add(const Duration(minutes: 15))));
+      expect(h.api.refreshCalls, 1, reason: 'a payment whose notification never came is caught on opening');
+      await tester.ensureVisible(find.widgetWithText(GoldButton, 'Pay now'));
+      await tester.tap(find.widgetWithText(GoldButton, 'Pay now'));
+      await tester.pumpAndSettle();
+      expect(h.api.checkoutCalls, 1);
+      expect(opened, [Uri.parse('https://checkout.paymongo.test/cs_1')]);
+
+      h.api.failCheckoutWith = const ApiException('payment_expired', status: 409);
+      await tester.tap(find.widgetWithText(GoldButton, 'Pay now'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('payment window is over'), findsOneWidget);
+    });
+
+    testWidgets('no "Pay now" once the 15 minutes are over', (tester) async {
+      await openBooking(tester, view(paid: true, expiresAt: now.subtract(const Duration(minutes: 1))));
+      expect(find.text('Payment time is over'), findsOneWidget);
+      expect(find.widgetWithText(GoldButton, 'Pay now'), findsNothing);
+    });
+
+    testWidgets('no "Pay now" on a confirmed paid booking', (tester) async {
+      final h = await openBooking(tester, view(status: ReservationStatus.confirmed, paid: true));
+      expect(find.widgetWithText(GoldButton, 'Pay now'), findsNothing);
+      expect(h.api.refreshCalls, 0);
+    });
+
     testWidgets('cancelled reasons are explained', (tester) async {
       await openBooking(tester, view(status: ReservationStatus.cancelled, reason: CancellationReason.paymentExpired));
       expect(find.textContaining('not completed within 15 minutes'), findsOneWidget);
+    });
+
+    testWidgets('a payment that arrived too late is explained as a refund', (tester) async {
+      final late = view(status: ReservationStatus.cancelled, reason: CancellationReason.paymentExpired, paid: true);
+      await openBooking(
+        tester,
+        BookingView(
+          accessKey: late.accessKey,
+          bookingReference: late.bookingReference,
+          status: late.status,
+          cancellationReason: late.cancellationReason,
+          screening: late.screening,
+          seats: late.seats,
+          totalCentavos: late.totalCentavos,
+          paymentStatus: PaymentStatus.verified,
+        ),
+      );
+      expect(find.textContaining('Cinematheque will refund it'), findsOneWidget);
+      expect(find.text('₱300 · Refund due'), findsOneWidget);
     });
 
     testWidgets('customer cancels a pending booking (with confirmation)', (tester) async {

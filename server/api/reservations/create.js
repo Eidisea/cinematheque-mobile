@@ -1,5 +1,7 @@
 import { getDb } from '../../lib/firebase.js';
 import { HttpError, endpoint } from '../../lib/http.js';
+import { expireReservation } from '../../lib/payments.js';
+import { getPaymongo } from '../../lib/paymongo.js';
 import { createReservation } from '../../lib/reservations.js';
 import { BookingNotAllowedError, SeatConflictError } from '../../lib/seat-holds.js';
 import { validateCreateReservation } from '../../lib/validate.js';
@@ -12,7 +14,9 @@ export default endpoint({ methods: ['POST'] }, async (body) => {
   if (Object.keys(errors).length) throw new HttpError(400, 'validation', { fields: errors });
 
   try {
-    const created = await createReservation(getDb(), value);
+    const db = getDb();
+    const paymongo = getPaymongo();
+    const created = await createReservation(db, value, { expire: (id) => expireReservation(db, paymongo, id) });
     return { status: 201, body: { ...created, expiresAt: created.expiresAt?.toISOString() ?? null } };
   } catch (e) {
     if (e instanceof SeatConflictError) throw new HttpError(409, 'seats_taken', { seats: e.labels });

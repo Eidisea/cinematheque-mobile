@@ -134,6 +134,7 @@ export async function releaseSeats(db, { screeningId, reservationId, seatLabels,
  * Marks a reservation's seats as confirmed (paid / approved) and removes the expiry.
  * Returns labels that no longer belong to this reservation (e.g. payment arrived after
  * the hold expired and someone else took the seat) so the caller can flag it.
+ * If [inTransaction] returns false, the holds are left unchanged (e.g. a late payment).
  */
 export async function confirmSeats(db, { screeningId, reservationId, seatLabels, inTransaction }) {
   const screeningRef = db.collection('screenings').doc(screeningId);
@@ -143,8 +144,8 @@ export async function confirmSeats(db, { screeningId, reservationId, seatLabels,
       const holds = snap.exists ? (snap.data().seatHolds ?? {}) : {};
       const kept = seatLabels.filter((l) => holds[l]?.reservationId === reservationId);
       const lost = seatLabels.filter((l) => !kept.includes(l));
-      if (inTransaction) await inTransaction(tx, { kept, lost });
-      if (kept.length) {
+      const proceed = inTransaction ? await inTransaction(tx, { kept, lost }) : true;
+      if (proceed !== false && kept.length) {
         const update = {};
         for (const l of kept) update[`seatHolds.${l}`] = { reservationId, state: 'confirmed', expiresAt: null };
         tx.update(screeningRef, update);

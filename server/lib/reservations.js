@@ -44,8 +44,14 @@ export function bookingViewOf(reservation, payment) {
  * Paid screenings: a pending payment + a 15-minute payment deadline.
  * Free screenings: no deadline — staff approve them.
  * [input] must already be validated (validateCreateReservation).
+ * [expire] ends a reservation whose expired seats were just taken over (the API passes
+ * payments.expireReservation, which asks PayMongo first so a payment is never lost).
  */
-export async function createReservation(db, input, { now = new Date() } = {}) {
+export async function createReservation(
+  db,
+  input,
+  { now = new Date(), expire = (id) => cancelReservation(db, { reservationId: id, reason: 'payment_expired', now }) } = {},
+) {
   const reservationRef = db.collection('reservations').doc();
   const accessKey = newAccessKey();
   const deadlineFor = (screening) => (screening.type === 'paid' ? new Date(now.getTime() + PAYMENT_WINDOW_MS) : null);
@@ -117,11 +123,8 @@ export async function createReservation(db, input, { now = new Date() } = {}) {
   });
 
   // Seats taken over from EXPIRED unpaid reservations: those reservations end now.
-  // (Phase 7 adds a PayMongo check first, so a late payment is never lost.)
   for (const id of replacedReservationIds) {
-    await cancelReservation(db, { reservationId: id, reason: 'payment_expired', now }).catch((e) =>
-      console.error('Could not expire replaced reservation', id, e),
-    );
+    await expire(id).catch((e) => console.error('Could not expire replaced reservation', id, e));
   }
 
   return created;

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../api/booking_api.dart';
 import '../../core/formatting.dart';
@@ -12,24 +13,85 @@ import '../widgets/brand.dart';
 import '../widgets/state_views.dart';
 
 /// One booking, live: status, the ticket (an e-ticket once confirmed), and — while
-/// pending — "Cancel booking". Opened with the access key saved on this phone.
+/// pending — "Pay now" (paid screenings) and "Cancel booking". Opened with the access key
+/// saved on this phone.
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key, required this.accessKey});
 
   final String accessKey;
 
+  /// Opens PayMongo's payment page in an in-app browser tab. Tests replace it.
+  @visibleForTesting
+  static Future<bool> Function(Uri url) openUrl = (url) => launchUrl(url, mode: LaunchMode.inAppBrowserView);
+
   @override
   State<BookingScreen> createState() => _BookingScreenState();
 }
 
-class _BookingScreenState extends State<BookingScreen> {
+class _BookingScreenState extends State<BookingScreen> with WidgetsBindingObserver {
   Stream<BookingView?>? _stream;
+  BookingView? _latest;
   bool _cancelling = false;
+  bool _paying = false;
+  bool _checkedOnOpen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _stream ??= CustomerServices.of(context).bookingViews.watch(widget.accessKey);
+  }
+
+  /// Back from the payment page (or the app reopened): ask the server to check PayMongo,
+  /// in case its notification is late. The booking view then updates by itself.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _refreshPayment();
+  }
+
+  bool _awaitsPayment(BookingView? b) =>
+      b != null && !b.isFree && b.status == ReservationStatus.pending && b.paymentStatus != PaymentStatus.verified;
+
+  Future<void> _refreshPayment() async {
+    final api = CustomerServices.of(context).bookingApi;
+    if (api == null || !_awaitsPayment(_latest)) return;
+    try {
+      await api.refreshPayment(widget.accessKey);
+    } on ApiException {
+      // Not fatal: the payment notification or the next check will catch up.
+    }
+  }
+
+  Future<void> _pay() async {
+    final api = CustomerServices.of(context).bookingApi;
+    if (api == null) return _toast('Online payment is not available right now.');
+    setState(() => _paying = true);
+    try {
+      final url = await api.startCheckout(widget.accessKey);
+      if (url == null) return _toast('Payment received. Your booking is being confirmed.');
+      if (!await BookingScreen.openUrl(url)) _toast('Could not open the payment page. Please try again.');
+    } on ApiException catch (e) {
+      _toast(switch (e.code) {
+        'payment_expired' => 'The 15-minute payment window is over, so the seats are being released.',
+        'not_payable' => 'This booking no longer needs payment.',
+        'payments_unavailable' || 'payment_provider_error' => 'Online payment is not available right now. Please try again shortly.',
+        'network' => 'No connection. Please try again.',
+        _ => 'Could not open the payment page. Please try again.',
+      });
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
   }
 
   Future<void> _cancel(BookingView booking) async {
@@ -106,6 +168,12 @@ class _BookingScreenState extends State<BookingScreen> {
               message: 'This booking could not be opened. Use "Find a booking" with your booking reference and email.',
             );
           }
+          _latest = booking;
+          if (!_checkedOnOpen && _awaitsPayment(booking)) {
+            _checkedOnOpen = true; // paid earlier but the notification never came? check once
+            WidgetsBinding.instance.addPostFrameCallback((_) => _refreshPayment());
+          }
+          final expired = booking.expiresAt != null && !booking.expiresAt!.isAfter(now);
           final reduced = Motion.reduced(context);
           return ListView(
             padding: const EdgeInsets.fromLTRB(Space.gutter, Space.sm, Space.gutter, Space.xxxl),
@@ -126,6 +194,16 @@ class _BookingScreenState extends State<BookingScreen> {
                       ),
                       child: _Ticket(key: ValueKey(booking.status), booking: booking),
                     ),
+                    if (_awaitsPayment(booking) && !expired) ...[
+                      const SizedBox(height: Space.xl),
+                      GoldButton(label: 'Pay now', icon: Icons.lock_outline_rounded, busy: _paying, onPressed: _pay),
+                      const SizedBox(height: Space.sm),
+                      const Text(
+                        'Secure payment by PayMongo · GCash, Maya or card',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontSize: 12.5, color: CustomerColors.muted),
+                      ),
+                    ],
                     if (booking.status == ReservationStatus.pending) ...[
                       const SizedBox(height: Space.xl),
                       OutlinedButton.icon(
@@ -188,7 +266,7 @@ class _StatusPanel extends StatelessWidget {
           CustomerColors.goldTint,
           'Payment needed',
           'Your seats are held until ${booking.expiresAt == null ? '—' : formatTime(booking.expiresAt!)}. '
-              'Online payment opens in the next update.',
+              'Pay before then to confirm them.',
         ),
       ReservationStatus.cancelled => (
           Icons.cancel_outlined,
@@ -197,6 +275,9 @@ class _StatusPanel extends StatelessWidget {
           'Booking cancelled',
           switch (booking.cancellationReason) {
             CancellationReason.customerCancelled => 'You cancelled this booking. The seats were released.',
+            CancellationReason.paymentExpired when booking.paymentStatus == PaymentStatus.verified =>
+              'Your payment arrived after the 15-minute window, so the seats were released. '
+                  'Cinematheque will refund it. Keep your booking reference.',
             CancellationReason.paymentExpired => 'Payment was not completed within 15 minutes, so the seats were released.',
             CancellationReason.staffCancelled =>
               'Cinematheque cancelled this booking. Refunds for paid bookings are handled directly by Cinematheque.',
@@ -296,7 +377,8 @@ class _Ticket extends StatelessWidget {
                           ? const [TextSpan(text: 'Free admission')]
                           : [
                               TextSpan(text: formatPeso(booking.totalCentavos), style: CcdType.money(15, color: ink)),
-                              TextSpan(text: ' · ${booking.paymentStatus == PaymentStatus.verified ? 'Paid' : 'Payment pending'}'),
+                              TextSpan(
+                                  text: ' · ${booking.paymentStatus == PaymentStatus.verified ? (cancelled ? 'Refund due' : 'Paid') : 'Payment pending'}'),
                             ],
                     ),
                   ),

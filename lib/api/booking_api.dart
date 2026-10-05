@@ -68,6 +68,14 @@ abstract class BookingApi {
   Future<String> lookup({required String bookingReference, required String email});
 
   Future<void> cancel(String accessKey);
+
+  /// PayMongo's payment page for a pending PAID booking, or null if PayMongo already has
+  /// the payment (the booking then updates by itself).
+  Future<Uri?> startCheckout(String accessKey);
+
+  /// Asks the server to check with PayMongo now, e.g. when the customer comes back from
+  /// the payment page. Any change arrives through the booking view.
+  Future<void> refreshPayment(String accessKey);
 }
 
 class HttpBookingApi implements BookingApi {
@@ -128,4 +136,14 @@ class HttpBookingApi implements BookingApi {
 
   @override
   Future<void> cancel(String accessKey) => _post('/api/bookings/cancel', {'accessKey': accessKey});
+
+  @override
+  Future<Uri?> startCheckout(String accessKey) async {
+    final j = await _post('/api/payments/checkout', {'accessKey': accessKey});
+    final url = j['checkoutUrl'] as String?;
+    return url == null ? null : Uri.parse(url);
+  }
+
+  @override
+  Future<void> refreshPayment(String accessKey) => _post('/api/payments/refresh', {'accessKey': accessKey});
 }
