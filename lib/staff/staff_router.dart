@@ -12,6 +12,7 @@ import 'screens/login_screen.dart';
 import 'screens/not_found_screen.dart';
 import 'screens/placeholder_screen.dart';
 import 'screens/reservation_screen.dart';
+import 'screens/reports_screen.dart';
 import 'screens/reservations_screen.dart';
 import 'screens/screening_form_screen.dart';
 import 'screens/screening_screen.dart';
@@ -84,6 +85,7 @@ GoRouter buildStaffRouter(StaffSession session) {
                   '/attendance' => const AttendanceScreen(),
                   '/settings/films' => const FilmsScreen(),
                   '/settings/staff' => StaffAccountsScreen(myUid: session.staff?.uid),
+                  '/reports' => const ReportsScreen(),
                   _ => PlaceholderScreen(item: item),
                 },
               ),
@@ -100,7 +102,7 @@ GoRouter buildStaffRouter(StaffSession session) {
                     path: ':id',
                     pageBuilder: (context, state) => NoTransitionPage(
                       key: ValueKey('screening-${state.pathParameters['id']}'),
-                      child: ScreeningScreen(screeningId: state.pathParameters['id']!),
+                      child: ScreeningScreen(screeningId: state.pathParameters['id']!, staffUid: session.staff?.uid),
                     ),
                     routes: [
                       GoRoute(

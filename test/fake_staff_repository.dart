@@ -1,11 +1,13 @@
 import 'dart:async';
 
+import 'package:ccd_mobile/data/models/attendance.dart';
 import 'package:ccd_mobile/data/models/movie.dart';
 import 'package:ccd_mobile/data/models/payment.dart';
 import 'package:ccd_mobile/data/models/reservation.dart';
 import 'package:ccd_mobile/data/models/screening.dart';
 import 'package:ccd_mobile/data/models/staff_member.dart';
 import 'package:ccd_mobile/staff/data/staff_repository.dart';
+import 'package:ccd_mobile/staff/reports/report.dart';
 
 /// Staff data held in memory — no Firebase involved.
 class FakeStaffRepository implements StaffRepository {
@@ -14,16 +16,21 @@ class FakeStaffRepository implements StaffRepository {
     this.reservations = const [],
     this.payments = const [],
     this.admitted = const {},
+    List<Attendance> attendances = const [],
     List<Movie> movies = const [],
     this.staff = const [],
     this.hasSeatLayout = true,
   })  : screenings = [...screenings],
+        attendances = [...attendances],
         movies = [...movies];
 
   /// Screenings are editable so tests can see what the staff pages saved.
   final List<Screening> screenings;
   final List<Movie> movies;
   final List<StaffMember> staff;
+
+  /// Admissions are editable so tests can see what the screening page saved.
+  final List<Attendance> attendances;
   bool hasSeatLayout;
   final refreshed = <String>[];
 
@@ -139,4 +146,62 @@ class FakeStaffRepository implements StaffRepository {
   @override
   Stream<Map<String, int>> watchAdmittedCounts(List<String> screeningIds) =>
       Stream.value({for (final e in admitted.entries) if (screeningIds.contains(e.key)) e.key: e.value});
+
+  @override
+  Stream<List<Attendance>> watchAttendancesFor(String screeningId) =>
+      _live(() => [for (final a in attendances) if (a.screeningId == screeningId) a]);
+
+  @override
+  Future<void> admit(Reservation reservation, List<String> seatLabels, {required String staffUid}) async {
+    if (reservation.status != ReservationStatus.confirmed) throw StateError('not confirmed');
+    for (final label in seatLabels) {
+      attendances.add(Attendance(
+        reservationId: reservation.id,
+        bookingReference: reservation.bookingReference,
+        screeningId: reservation.screeningId,
+        seatLabel: label,
+        attendeeName: reservation.seats.firstWhere((s) => s.label == label).attendee.fullName,
+        checkedInBy: staffUid,
+        checkedInAt: DateTime.utc(2026, 10, 8, 2),
+      ));
+    }
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> undoAdmission(String attendanceId) async {
+    attendances.removeWhere((a) => a.id == attendanceId);
+    _changes.add(null);
+  }
+
+  @override
+  Future<void> saveAdmissionNote(String attendanceId, String? remarks) async {
+    final i = attendances.indexWhere((a) => a.id == attendanceId);
+    final a = attendances[i];
+    final text = remarks?.trim();
+    attendances[i] = Attendance(
+      reservationId: a.reservationId,
+      bookingReference: a.bookingReference,
+      screeningId: a.screeningId,
+      seatLabel: a.seatLabel,
+      attendeeName: a.attendeeName,
+      checkedInBy: a.checkedInBy,
+      checkedInAt: a.checkedInAt,
+      remarks: text == null || text.isEmpty ? null : text,
+    );
+    _changes.add(null);
+  }
+
+  @override
+  Future<ReportData> loadReport(DateTime start, DateTime end) async {
+    final inRange = [for (final s in screenings) if (!s.startAt.isBefore(start) && s.startAt.isBefore(end)) s]
+      ..sort((a, b) => a.startAt.compareTo(b.startAt));
+    final ids = {for (final s in inRange) s.id};
+    return ReportData(
+      screenings: inRange,
+      reservations: [for (final r in reservations) if (ids.contains(r.screeningId)) r],
+      attendances: [for (final a in attendances) if (ids.contains(a.screeningId)) a],
+      payments: payments,
+    );
+  }
 }

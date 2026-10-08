@@ -21,8 +21,9 @@ class Harness {
   final FakeStaffApi api;
 }
 
-Future<Harness> pumpStaff(WidgetTester tester, {List<Screening>? screenings, List<Reservation> reservations = const []}) async {
-  tester.view.physicalSize = const Size(1440, 1100);
+Future<Harness> pumpStaff(WidgetTester tester,
+    {List<Screening>? screenings, List<Reservation> reservations = const [], double height = 1100}) async {
+  tester.view.physicalSize = Size(1440, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repo = FakeStaffRepository(
@@ -97,6 +98,84 @@ void main() {
     await tester.pumpAndSettle();
     expect(h.repo.screenings, isEmpty);
     expect(find.text('Deleted “Malvarosa”.'), findsOneWidget);
+  });
+
+  testWidgets('admission: one person, a party with someone missing, undo and a note', (tester) async {
+    final malvarosa = d.screening('m', 'Malvarosa', d.manila(8, 9), booked: 4); // started an hour ago
+    final h = await pumpStaff(tester, screenings: [malvarosa], reservations: [
+      d.booking('solo', malvarosa, first: 'Sol', seats: 1, status: ReservationStatus.confirmed),
+      d.booking('trio', malvarosa, first: 'Tess', seats: 3, status: ReservationStatus.confirmed),
+      d.booking('wait', malvarosa, first: 'Wayne'),
+    ], height: 1600);
+    await tester.tap(find.text('Malvarosa'));
+    await tester.pumpAndSettle();
+    expect(find.text('To admit'), findsOneWidget);
+    expect(find.text('Not in'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Approve'), findsNothing, reason: 'the screening has started');
+
+    // A party of 1: straight from its row.
+    await tester.tap(find.widgetWithText(FilledButton, 'Admit'));
+    await tester.pumpAndSettle();
+    expect(h.repo.attendances.map((a) => a.id), ['solo_B1']);
+    expect(h.repo.attendances.single.checkedInBy, 'u1');
+    expect(find.text('Seat B1 admitted.'), findsOneWidget);
+    expect(find.text('In 10:00 AM'), findsOneWidget);
+
+    // A party of 3: everyone ticked, untick the one who isn't here.
+    await tester.tap(find.widgetWithText(FilledButton, 'Admit party'));
+    await tester.pumpAndSettle();
+    expect(find.text('Untick anyone who isn’t here.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Admit 3'), findsOneWidget);
+    await tester.tap(find.byType(Checkbox).at(1)); // B2
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Admit 2'));
+    await tester.pumpAndSettle();
+    expect(h.repo.attendances.map((a) => a.id), ['solo_B1', 'trio_B1', 'trio_B3']);
+    expect(find.text('2 admitted: B1, B3.'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'Admit 1'), findsOneWidget, reason: 'B2 can still be admitted later');
+    expect(find.text('3 admitted', findRichText: true), findsOneWidget, reason: 'the header figure');
+    expect(find.text('2 / 3', findRichText: true), findsOneWidget, reason: 'the party row');
+
+    // A note, then undo.
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Note').first);
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, 'Arrived late');
+    await tester.tap(find.widgetWithText(FilledButton, 'Save'));
+    await tester.pumpAndSettle();
+    expect(h.repo.attendances.first.remarks, 'Arrived late');
+    expect(find.widgetWithText(OutlinedButton, 'Note ●'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(OutlinedButton, 'Undo').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(FilledButton, 'Undo admission'));
+    await tester.pumpAndSettle();
+    expect(h.repo.attendances.map((a) => a.id), ['trio_B1', 'trio_B3']);
+
+    // Filters and search.
+    await tester.tap(find.text('Pending'));
+    await tester.pumpAndSettle();
+    expect(find.text('Wayne Dela Cruz'), findsOneWidget);
+    expect(find.text('Sol Dela Cruz'), findsNothing);
+    await tester.tap(find.text('All'));
+    await tester.enterText(find.byType(TextField).first, 'ccd-solo');
+    await tester.pumpAndSettle();
+    expect(find.text('Sol Dela Cruz'), findsOneWidget);
+    expect(find.text('Wayne Dela Cruz'), findsNothing);
+  });
+
+  testWidgets('after the screening, anyone not admitted is a no-show; pending bookings cannot be admitted', (tester) async {
+    final old = d.screening('old', 'Oro, Plata, Mata', d.manila(1, 18));
+    await pumpStaff(tester, screenings: [old], reservations: [
+      d.booking('gone', old, first: 'Gina', seats: 1, status: ReservationStatus.confirmed),
+      d.booking('pend', old, first: 'Pia', seats: 1),
+    ]);
+    await tester.tap(find.text('Past'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Oro, Plata, Mata'));
+    await tester.pumpAndSettle();
+    expect(find.text('No-show'), findsNWidgets(2), reason: 'the filter chip and Gina’s row');
+    expect(find.text('To admit'), findsNothing);
+    expect(find.widgetWithText(FilledButton, 'Admit'), findsOneWidget, reason: 'late admission is still possible, as on the website');
   });
 
   testWidgets('new screening: required fields first, then a film from the catalog with the end from its runtime', (tester) async {

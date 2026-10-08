@@ -5,20 +5,25 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../core/formatting.dart';
+import '../../data/models/attendance.dart';
 import '../../data/models/reservation.dart';
 import '../../data/models/screening.dart';
 import '../data/staff_api.dart';
 import '../staff_services.dart';
 import '../theme/staff_theme.dart';
 import '../widgets/admin_ui.dart';
+import '../widgets/admission_table.dart';
 
 /// One screening, as on the website admin: when and how much, its numbers (seats booked,
 /// admitted, waiting), the actions (Approve all pending · Edit · Delete while unbooked),
-/// and one row per booking. Admitting people at the door comes with Phase 10.
+/// and the bookings, where staff admit people at the door (AdmissionTable).
 class ScreeningScreen extends StatefulWidget {
-  const ScreeningScreen({super.key, required this.screeningId});
+  const ScreeningScreen({super.key, required this.screeningId, this.staffUid});
 
   final String screeningId;
+
+  /// The signed-in staff member, recorded on each admission.
+  final String? staffUid;
 
   @override
   State<ScreeningScreen> createState() => _ScreeningScreenState();
@@ -29,9 +34,14 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
   Screening? _screening;
   bool _loaded = false;
   List<Reservation> _bookings = const [];
-  int _admitted = 0;
+  Map<String, Attendance> _admitted = const {};
+  Map<String, String> _staffNames = const {};
   Object? _error;
   bool _busy = false;
+  final _busyParties = <String>{};
+  PartyState? _filter;
+  final _search = TextEditingController();
+  String _query = '';
 
   @override
   void didChangeDependencies() {
@@ -48,7 +58,8 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
             onError: (Object e) => setState(() => _error = e),
           ),
       data.watchReservationsFor(id).listen((v) => setState(() => _bookings = v)),
-      data.watchAdmittedCounts([id]).listen((v) => setState(() => _admitted = v[id] ?? 0)),
+      data.watchAttendancesFor(id).listen((v) => setState(() => _admitted = {for (final a in v) a.id: a})),
+      data.watchStaff().listen((v) => setState(() => _staffNames = {for (final m in v) m.uid: m.firstName})),
     ]);
   }
 
@@ -57,6 +68,7 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
     for (final s in _subs) {
       s.cancel();
     }
+    _search.dispose();
     super.dispose();
   }
 
@@ -79,6 +91,87 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _approve(Reservation r) async {
+    final api = StaffServices.of(context).api;
+    if (api == null) return showMessage(context, 'The booking server is not configured for this build.');
+    setState(() => _busyParties.add(r.id));
+    try {
+      await api.approve(r.id);
+      if (mounted) showMessage(context, 'Approved ${r.bookingReference}. The e-ticket was emailed.');
+    } catch (e) {
+      if (mounted) showMessage(context, staffApiMessage(e));
+    } finally {
+      if (mounted) setState(() => _busyParties.remove(r.id));
+    }
+  }
+
+  /// → true when the seats were admitted.
+  Future<bool> _admit(Reservation r, List<String> seatLabels) async {
+    final uid = widget.staffUid;
+    if (uid == null) return false;
+    final seats = [for (final l in seatLabels) if (!_admitted.containsKey(Attendance.docId(r.id, l))) l];
+    if (seats.isEmpty) return true;
+    setState(() => _busyParties.add(r.id));
+    try {
+      await StaffServices.of(context).data.admit(r, seats, staffUid: uid);
+      if (mounted) {
+        showMessage(context, seats.length == 1 ? 'Seat ${seats.single} admitted.' : '${seats.length} admitted: ${seats.join(', ')}.');
+      }
+      return true;
+    } catch (_) {
+      if (mounted) {
+        showMessage(context, 'No one was admitted. Someone may have just admitted them, or the booking is no longer approved.');
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _busyParties.remove(r.id));
+    }
+  }
+
+  Future<void> _undo(Reservation r, Attendance a) async {
+    final ok = await confirmAction(
+      context,
+      title: 'Undo admission?',
+      message: 'Mark ${a.attendeeName} (seat ${a.seatLabel}) as not admitted?',
+      confirm: 'Undo admission',
+    );
+    if (!ok || !mounted) return;
+    setState(() => _busyParties.add(r.id));
+    try {
+      await StaffServices.of(context).data.undoAdmission(a.id);
+      if (mounted) showMessage(context, 'Seat ${a.seatLabel} is no longer admitted.');
+    } catch (_) {
+      if (mounted) showMessage(context, 'Could not undo it. Check your connection and try again.');
+    } finally {
+      if (mounted) setState(() => _busyParties.remove(r.id));
+    }
+  }
+
+  Future<void> _note(Reservation r, ReservedSeat seat, Attendance a) async {
+    final data = StaffServices.of(context).data;
+    final remarks = await showDialog<String>(
+      context: context,
+      builder: (context) => _NoteDialog(seat: seat, remarks: a.remarks),
+    );
+    if (remarks == null || !mounted) return;
+    try {
+      await data.saveAdmissionNote(a.id, remarks);
+      if (mounted) showMessage(context, 'Note saved.');
+    } catch (_) {
+      if (mounted) showMessage(context, 'Could not save the note. Check your connection and try again.');
+    }
+  }
+
+  bool _matches(Reservation r) {
+    final q = _query.trim().toLowerCase();
+    if (q.isEmpty) return true;
+    final compact = q.replaceAll('-', '');
+    return r.bookingReference.toLowerCase().replaceAll('-', '').contains(compact) ||
+        r.booker.fullName.toLowerCase().contains(q) ||
+        r.booker.email.toLowerCase().contains(q) ||
+        r.seats.any((s) => s.label.toLowerCase() == q || s.attendee.fullName.toLowerCase().contains(q));
   }
 
   Future<void> _delete(Screening s) async {
@@ -158,7 +251,7 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
           runSpacing: 4,
           children: [
             Figure('$booked', '/ ${s.capacity} seats booked'),
-            Figure('$_admitted', 'admitted'),
+            Figure('${_admitted.length}', 'admitted'),
             if (waiting > 0)
               Text.rich(TextSpan(children: [
                 TextSpan(
@@ -202,18 +295,64 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
       ],
     );
 
-    final list = AdminSection(
-      title: 'Reservations',
-      count: 0,
-      child: _bookings.isEmpty
-          ? Panel(children: const [
-              Padding(
-                padding: EdgeInsets.symmetric(vertical: 40),
-                child: Center(child: Text('No reservations yet', style: TextStyle(fontWeight: FontWeight.w600))),
+    final isOver = !now.isBefore(s.endAt);
+    final states = {for (final r in _bookings) r.id: partyState(r, _admitted, isOver: isOver)};
+    final filters = <PartyState?>[
+      null,
+      isOver ? PartyState.noShow : PartyState.toAdmit,
+      PartyState.admitted,
+      PartyState.pending,
+      PartyState.cancelled,
+    ];
+    final filter = filters.contains(_filter) ? _filter : null;
+    final shown = [for (final r in _bookings) if ((filter == null || states[r.id] == filter) && _matches(r)) r];
+    Widget empty(String text) => Panel(children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 40),
+            child: Center(child: Text(text, style: const TextStyle(fontWeight: FontWeight.w600))),
+          ),
+        ]);
+
+    final list = _bookings.isEmpty
+        ? empty('No reservations yet')
+        : Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                FilterChips<PartyState?>(
+                  values: filters,
+                  current: filter,
+                  label: (v) => v?.label ?? 'All',
+                  count: (v) => v == null ? _bookings.length : states.values.where((x) => x == v).length,
+                  onSelect: (v) => setState(() => _filter = v),
+                ),
+                SearchField(
+                  controller: _search,
+                  hint: 'Name, reference or seat',
+                  onChanged: (v) => setState(() => _query = v),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            if (shown.isEmpty)
+              empty('No matches')
+            else
+              AdmissionTable(
+                parties: shown,
+                admitted: _admitted,
+                staffNames: _staffNames,
+                isOver: isOver,
+                now: now,
+                busy: _busyParties,
+                onApprove: _approve,
+                onAdmit: _admit,
+                onUndo: _undo,
+                onNote: _note,
               ),
-            ])
-          : Panel(children: [for (final r in _bookings) _Party(reservation: r, now: now)]),
-    );
+          ]);
 
     return LayoutBuilder(builder: (context, box) {
       final wide = box.maxWidth >= 1000;
@@ -235,50 +374,43 @@ class _ScreeningScreenState extends State<ScreeningScreen> {
   }
 }
 
-/// One booking (party) on the screening: who, reference and seats, state, when.
-class _Party extends StatelessWidget {
-  const _Party({required this.reservation, required this.now});
+/// Remarks on one admission. → the new text, or null when cancelled.
+class _NoteDialog extends StatefulWidget {
+  const _NoteDialog({required this.seat, this.remarks});
 
-  final Reservation reservation;
-  final DateTime now;
+  final ReservedSeat seat;
+  final String? remarks;
 
   @override
-  Widget build(BuildContext context) {
-    final r = reservation;
-    final (label, tone) = bookingState(r, now);
-    return Material(
-      color: StaffColors.surface,
-      child: InkWell(
-        onTap: () => context.go('/reservations/${r.id}'),
-        hoverColor: StaffColors.surfaceAlt,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-          child: Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('${r.booker.firstName} ${r.booker.lastName}', style: const TextStyle(fontWeight: FontWeight.w600)),
-                    Text.rich(TextSpan(style: const TextStyle(fontSize: 13, color: StaffColors.textMuted), children: [
-                      TextSpan(text: r.bookingReference, style: staffMono.copyWith(fontSize: 12.5)),
-                      TextSpan(text: ' · ${r.seats.length} ${r.seats.length == 1 ? 'seat' : 'seats'} · ${r.seatLabels.join(', ')}'),
-                    ])),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              StateLabel(label, tone),
-              const SizedBox(width: 16),
-              SizedBox(
-                width: 64,
-                child: Text(timeAgo(r.createdAt, now),
-                    textAlign: TextAlign.right, style: const TextStyle(fontSize: 12, color: StaffColors.textMuted)),
-              ),
-            ],
+  State<_NoteDialog> createState() => _NoteDialogState();
+}
+
+class _NoteDialogState extends State<_NoteDialog> {
+  late final _text = TextEditingController(text: widget.remarks ?? '');
+
+  @override
+  void dispose() {
+    _text.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+        title: Text('Remarks · seat ${widget.seat.label}'),
+        content: SizedBox(
+          width: 400,
+          child: TextField(
+            controller: _text,
+            autofocus: true,
+            minLines: 3,
+            maxLines: 6,
+            maxLength: 2000,
+            decoration: InputDecoration(hintText: 'A note about ${widget.seat.attendee.fullName}'),
           ),
         ),
-      ),
-    );
-  }
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(context, _text.text), child: const Text('Save')),
+        ],
+      );
 }

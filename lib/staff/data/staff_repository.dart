@@ -1,5 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 
+import '../../data/models/attendance.dart';
 import '../../data/models/movie.dart';
 import '../../data/models/payment.dart';
 import '../../data/models/reservation.dart';
@@ -8,6 +9,7 @@ import '../../data/models/seat_layout.dart';
 import '../../data/models/staff_member.dart';
 import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/firestore_collections.dart';
+import '../reports/report.dart';
 
 /// What the staff pages read (all live). Staff may read these collections
 /// (firestore.rules); reservations and payments are changed only through the server
@@ -33,6 +35,22 @@ abstract class StaffRepository {
 
   /// Admitted seats per screening, for these screenings (at most 30).
   Stream<Map<String, int>> watchAdmittedCounts(List<String> screeningIds);
+
+  /// Who has been admitted to one screening (one record per seat).
+  Stream<List<Attendance>> watchAttendancesFor(String screeningId);
+
+  /// Admits these seats of a CONFIRMED booking, all or none (firestore.rules checks each).
+  Future<void> admit(Reservation reservation, List<String> seatLabels, {required String staffUid});
+
+  /// Undoes an admission made by mistake.
+  Future<void> undoAdmission(String attendanceId);
+
+  /// Saves the remarks on an admission (null or blank clears them).
+  Future<void> saveAdmissionNote(String attendanceId, String? remarks);
+
+  /// Screenings starting in [start, end) with their bookings, admissions and verified
+  /// payments, read once for the Reports page.
+  Future<ReportData> loadReport(DateTime start, DateTime end);
 
   /// Bookings for the Reservations page, newest first.
   Stream<List<Reservation>> watchReservationList({int limit = 500});
@@ -208,4 +226,62 @@ class FirestoreStaffRepository implements StaffRepository {
           }
           return counts;
         });
+
+  @override
+  Stream<List<Attendance>> watchAttendancesFor(String screeningId) =>
+      _c.attendances.where('screeningId', isEqualTo: screeningId).snapshots().map(_values);
+
+  @override
+  Future<void> admit(Reservation reservation, List<String> seatLabels, {required String staffUid}) {
+    final batch = _c.db.batch();
+    for (final label in seatLabels) {
+      final seat = reservation.seats.firstWhere((s) => s.label == label);
+      final a = Attendance(
+        reservationId: reservation.id,
+        bookingReference: reservation.bookingReference,
+        screeningId: reservation.screeningId,
+        seatLabel: label,
+        attendeeName: seat.attendee.fullName,
+        checkedInBy: staffUid,
+      );
+      batch.set(_c.attendances.doc(a.id), a);
+    }
+    return batch.commit();
+  }
+
+  @override
+  Future<void> undoAdmission(String attendanceId) => _c.attendances.doc(attendanceId).delete();
+
+  @override
+  Future<void> saveAdmissionNote(String attendanceId, String? remarks) {
+    final text = remarks?.trim();
+    return _c.db
+        .collection(FirestoreCollections.attendancesPath)
+        .doc(attendanceId)
+        .update({'remarks': text == null || text.isEmpty ? null : text});
+  }
+
+  @override
+  Future<ReportData> loadReport(DateTime start, DateTime end) async {
+    final from = Timestamp.fromDate(start);
+    final to = Timestamp.fromDate(end);
+    final screenings = _values(await _c.screenings
+        .where('startAt', isGreaterThanOrEqualTo: from)
+        .where('startAt', isLessThan: to)
+        .orderBy('startAt')
+        .get());
+    if (screenings.isEmpty) return const ReportData();
+    // One range filter on the screening copied into each booking: no composite index needed.
+    final reservations = _values(await _c.reservations
+        .where('screening.startAt', isGreaterThanOrEqualTo: from)
+        .where('screening.startAt', isLessThan: to)
+        .get());
+    final ids = [for (final s in screenings) s.id];
+    final attendances = [
+      for (var i = 0; i < ids.length; i += 30)
+        ..._values(await _c.attendances.where('screeningId', whereIn: ids.skip(i).take(30).toList()).get()),
+    ];
+    final payments = _values(await _c.payments.where('status', isEqualTo: PaymentStatus.verified.name).get());
+    return ReportData(screenings: screenings, reservations: reservations, attendances: attendances, payments: payments);
+  }
 }
