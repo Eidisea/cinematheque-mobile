@@ -22,8 +22,8 @@ class Harness {
 }
 
 Future<Harness> pumpStaff(WidgetTester tester,
-    {List<Screening>? screenings, List<Reservation> reservations = const [], double height = 1100}) async {
-  tester.view.physicalSize = Size(1440, height);
+    {List<Screening>? screenings, List<Reservation> reservations = const [], double width = 1440, double height = 1100}) async {
+  tester.view.physicalSize = Size(width, height);
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.reset);
   final repo = FakeStaffRepository(
@@ -177,6 +177,36 @@ void main() {
     expect(find.text('To admit'), findsNothing);
     expect(find.widgetWithText(FilledButton, 'Admit'), findsOneWidget, reason: 'late admission is still possible, as on the website');
   });
+
+  for (final width in [1100.0, 800.0, 600.0]) {
+    testWidgets('admission on a ${width.toInt()} px window: the Admit buttons stay on screen', (tester) async {
+      final malvarosa = d.screening('m', 'Malvarosa', d.manila(8, 9), booked: 3);
+      final h = await pumpStaff(tester, width: width, height: 1400, screenings: [malvarosa], reservations: [
+        d.booking('solo', malvarosa, first: 'Sol', seats: 1, status: ReservationStatus.confirmed),
+        d.booking('duo', malvarosa, first: 'Dan', seats: 2, status: ReservationStatus.confirmed),
+      ]);
+      await tester.tap(find.text('Malvarosa'));
+      await tester.pumpAndSettle();
+
+      void onScreen(Finder f) {
+        final box = tester.getRect(f);
+        expect(box.left >= 0 && box.right <= width, isTrue, reason: '$f at $box');
+      }
+
+      onScreen(find.widgetWithText(FilledButton, 'Admit'));
+      onScreen(find.widgetWithText(FilledButton, 'Admit party'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Admit'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(FilledButton, 'Admit party'));
+      await tester.pumpAndSettle();
+      onScreen(find.widgetWithText(FilledButton, 'Admit 2'));
+      await tester.tap(find.widgetWithText(FilledButton, 'Admit 2'));
+      await tester.pumpAndSettle();
+      expect(h.repo.attendances.map((a) => a.id), ['solo_B1', 'duo_B1', 'duo_B2']);
+      onScreen(find.widgetWithText(OutlinedButton, 'Undo').first);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('new screening: required fields first, then a film from the catalog with the end from its runtime', (tester) async {
     final h = await pumpStaff(tester);

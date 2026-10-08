@@ -115,28 +115,29 @@ class _AdmissionTableState extends State<AdmissionTable> {
   @override
   Widget build(BuildContext context) {
     const head = TextStyle(fontSize: 12, fontWeight: FontWeight.w600, letterSpacing: 0.48, color: StaffColors.gray600);
-    final table = Panel(children: [
-      Container(
-        color: StaffColors.surfaceAlt,
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-        child: const Row(children: [
-          Expanded(child: Text('RESERVATION', style: head)),
-          SizedBox(width: _seatsWidth, child: Text('SEATS', style: head)),
-          SizedBox(width: _statusWidth, child: Text('STATUS', style: head)),
-          SizedBox(width: _admittedWidth, child: Text('ADMITTED', style: head)),
-          SizedBox(width: _actionsWidth, child: Text('ACTIONS', style: head, textAlign: TextAlign.right)),
-        ]),
-      ),
-      for (final r in widget.parties) ..._party(r),
-    ]);
-    return LayoutBuilder(
-      builder: (context, box) => box.maxWidth >= _minWidth
-          ? table
-          : SingleChildScrollView(scrollDirection: Axis.horizontal, child: SizedBox(width: _minWidth, child: table)),
-    );
+    // Narrower than the full table: each row stacks seats, status and admitted under the
+    // name, and keeps its buttons on the right, so Admit is never off screen.
+    return LayoutBuilder(builder: (context, box) {
+      final compact = box.maxWidth < _minWidth;
+      return Panel(children: [
+        if (!compact)
+          Container(
+            color: StaffColors.surfaceAlt,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+            child: const Row(children: [
+              Expanded(child: Text('RESERVATION', style: head)),
+              SizedBox(width: _seatsWidth, child: Text('SEATS', style: head)),
+              SizedBox(width: _statusWidth, child: Text('STATUS', style: head)),
+              SizedBox(width: _admittedWidth, child: Text('ADMITTED', style: head)),
+              SizedBox(width: _actionsWidth, child: Text('ACTIONS', style: head, textAlign: TextAlign.right)),
+            ]),
+          ),
+        for (final r in widget.parties) ..._party(r, compact: compact),
+      ]);
+    });
   }
 
-  List<Widget> _party(Reservation r) {
+  List<Widget> _party(Reservation r, {required bool compact}) {
     final seats = partySeats(r);
     final single = seats.length == 1 ? seats.single : null;
     final admittable = _admittable(r);
@@ -222,20 +223,27 @@ class _AdmissionTableState extends State<AdmissionTable> {
                     for (final f in flags)
                       TextSpan(text: ' · $f', style: const TextStyle(fontWeight: FontWeight.w700, color: StaffColors.text)),
                   ])),
+                  if (compact) ...[
+                    const SizedBox(height: 6),
+                    Wrap(spacing: 10, runSpacing: 6, crossAxisAlignment: WrapCrossAlignment.center, children: [
+                      Wrap(spacing: 4, runSpacing: 4, children: [for (final s in seats) _SeatTag(s.label)]),
+                      StateLabel(label, tone),
+                      admittedCell,
+                    ]),
+                  ],
                 ]),
               ),
             ]),
           ),
-          SizedBox(
-            width: _seatsWidth,
-            child: Wrap(spacing: 4, runSpacing: 4, children: [for (final s in seats) _SeatTag(s.label)]),
-          ),
-          SizedBox(width: _statusWidth, child: Align(alignment: Alignment.centerLeft, child: StateLabel(label, tone))),
-          SizedBox(width: _admittedWidth, child: admittedCell),
-          SizedBox(
-            width: _actionsWidth,
-            child: Wrap(alignment: WrapAlignment.end, spacing: 6, runSpacing: 6, children: actions),
-          ),
+          if (!compact) ...[
+            SizedBox(
+              width: _seatsWidth,
+              child: Wrap(spacing: 4, runSpacing: 4, children: [for (final s in seats) _SeatTag(s.label)]),
+            ),
+            SizedBox(width: _statusWidth, child: Align(alignment: Alignment.centerLeft, child: StateLabel(label, tone))),
+            SizedBox(width: _admittedWidth, child: admittedCell),
+          ],
+          _actions(actions, compact: compact),
         ],
       ),
     ];
@@ -245,6 +253,11 @@ class _AdmissionTableState extends State<AdmissionTable> {
       for (final s in seats) {
         final a = _admission(r, s);
         final canPick = a == null && r.status == ReservationStatus.confirmed;
+        final memberAdmitted = a != null
+            ? _InAt(a, widget.staffNames)
+            : r.status == ReservationStatus.confirmed && widget.isOver
+                ? const Text('No-show', style: TextStyle(color: StaffColors.danger))
+                : const Text('—', style: TextStyle(color: StaffColors.textMuted));
         rows.add(_Row(
           muted: muted,
           indent: true,
@@ -263,34 +276,35 @@ class _AdmissionTableState extends State<AdmissionTable> {
                       : null,
                 ),
                 Expanded(
-                  child: Text.rich(TextSpan(children: [
-                    TextSpan(text: s.attendee.fullName),
-                    if (s.isBooker) const TextSpan(text: ' · Booker', style: TextStyle(fontSize: 13, color: StaffColors.textMuted)),
-                    if (s.attendee.seniorCardNo != null)
-                      const TextSpan(text: ' · Senior', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                    if (s.attendee.isPwd) const TextSpan(text: ' · PWD', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
-                  ])),
+                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text.rich(TextSpan(children: [
+                      TextSpan(text: s.attendee.fullName),
+                      if (s.isBooker)
+                        const TextSpan(text: ' · Booker', style: TextStyle(fontSize: 13, color: StaffColors.textMuted)),
+                      if (s.attendee.seniorCardNo != null)
+                        const TextSpan(text: ' · Senior', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                      if (s.attendee.isPwd)
+                        const TextSpan(text: ' · PWD', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700)),
+                    ])),
+                    if (compact) ...[
+                      const SizedBox(height: 4),
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [_SeatTag(s.label), memberAdmitted],
+                      ),
+                    ],
+                  ]),
                 ),
               ]),
             ),
-            SizedBox(width: _seatsWidth, child: Align(alignment: Alignment.centerLeft, child: _SeatTag(s.label))),
-            const SizedBox(width: _statusWidth),
-            SizedBox(
-              width: _admittedWidth,
-              child: a != null
-                  ? _InAt(a, widget.staffNames)
-                  : r.status == ReservationStatus.confirmed && widget.isOver
-                      ? const Text('No-show', style: TextStyle(color: StaffColors.danger))
-                      : const Text('—', style: TextStyle(color: StaffColors.textMuted)),
-            ),
-            SizedBox(
-              width: _actionsWidth,
-              child: Wrap(
-                alignment: WrapAlignment.end,
-                spacing: 6,
-                children: [if (a != null) ..._seatActions(r, s, busy: busy)],
-              ),
-            ),
+            if (!compact) ...[
+              SizedBox(width: _seatsWidth, child: Align(alignment: Alignment.centerLeft, child: _SeatTag(s.label))),
+              const SizedBox(width: _statusWidth),
+              SizedBox(width: _admittedWidth, child: memberAdmitted),
+            ],
+            _actions([if (a != null) ..._seatActions(r, s, busy: busy)], compact: compact),
           ],
         ));
       }
@@ -306,9 +320,10 @@ class _AdmissionTableState extends State<AdmissionTable> {
               ),
             ),
             SizedBox(
-              width: _actionsWidth,
+              width: compact ? null : _actionsWidth,
               child: Align(
                 alignment: Alignment.centerRight,
+                widthFactor: compact ? 1 : null,
                 child: AdminButton(
                   label: 'Admit ${picked.length}',
                   small: true,
@@ -322,6 +337,24 @@ class _AdmissionTableState extends State<AdmissionTable> {
       }
     }
     return rows;
+  }
+
+  /// The Actions cell: a fixed column in the full table; on narrow windows just as wide
+  /// as its buttons, always at the right edge of the row.
+  Widget _actions(List<Widget> buttons, {required bool compact}) {
+    if (!compact) {
+      return SizedBox(
+        width: _actionsWidth,
+        child: Wrap(alignment: WrapAlignment.end, spacing: 6, runSpacing: 6, children: buttons),
+      );
+    }
+    if (buttons.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(left: 10),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        for (var i = 0; i < buttons.length; i++) ...[if (i > 0) const SizedBox(width: 6), buttons[i]],
+      ]),
+    );
   }
 
   /// One person's actions: Admit, or Note + Undo once admitted.
