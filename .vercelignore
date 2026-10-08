@@ -1,0 +1,11 @@
+# The Vercel project's Root Directory is server/: upload only the server, as server/.vercelignore allows.
+/*
+!/server
+/server/test/
+/server/dev-server.js
+/server/node_modules/
+/server/.vercel/
+/server/.env*
+/server/*.pem
+/server/*service-account*.json
+/server/*-firebase-adminsdk-*.json

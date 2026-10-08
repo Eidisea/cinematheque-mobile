@@ -292,6 +292,46 @@ void main() {
       expect(find.text('Required'), findsWidgets);
     });
 
+    testWidgets('no errors while typing; after Reserve seats they clear as fields are fixed', (tester) async {
+      await pumpApp(tester);
+      await openDetailsForm(tester);
+      await enterIn(tester, 'A1', 'Email', 'juan@');
+      await enterIn(tester, 'A1', 'First name', 'J');
+      await enterIn(tester, 'A1', 'First name', '');
+      expect(find.text('Enter a valid email address'), findsNothing, reason: 'still typing');
+      expect(find.text('Required'), findsNothing);
+
+      await submit(tester);
+      expect(find.text('Enter a valid email address'), findsOneWidget);
+      await enterIn(tester, 'A1', 'Email', 'juan@example.com');
+      expect(find.text('Enter a valid email address'), findsNothing, reason: 'fixed, so the error goes');
+    });
+
+    testWidgets('the mobile number is spaced as 9XX XXX XXXX and sent as +639…', (tester) async {
+      final h = await pumpApp(tester);
+      await openDetailsForm(tester);
+      final mobile = seatField('A1', 'Mobile number');
+      String shown() => tester.widget<EditableText>(find.descendant(of: mobile, matching: find.byType(EditableText))).controller.text;
+
+      await enterIn(tester, 'A1', 'Mobile number', '9171');
+      expect(shown(), '917 1');
+      await enterIn(tester, 'A1', 'Mobile number', '9171234567');
+      expect(shown(), '917 123 4567');
+      await enterIn(tester, 'A1', 'Mobile number', '917123');
+      expect(shown(), '917 123');
+      // Backspace with the caret just after the space: the 7 before it goes.
+      tester.testTextInput.updateEditingValue(
+          const TextEditingValue(text: '917123', selection: TextSelection.collapsed(offset: 3)));
+      await tester.pump();
+      expect(shown(), '911 23');
+      await enterIn(tester, 'A1', 'Mobile number', '+63 917-123-45678');
+      expect(shown(), '917 123 4567', reason: 'pasted with +63: ten digits kept');
+
+      await fillValidForm(tester);
+      await submit(tester);
+      expect(h.api.lastRequest!.booker['contactNo'], '+639171234567');
+    });
+
     testWidgets('seats taken meanwhile → explained, back to the seat map', (tester) async {
       final h = await pumpApp(tester);
       await openDetailsForm(tester);

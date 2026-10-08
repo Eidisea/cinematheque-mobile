@@ -65,17 +65,43 @@ String? _mobile(String? v) {
   return RegExp(r'^9\d{9}$').hasMatch(t) ? null : '10 digits starting with 9';
 }
 
-/// Keeps only the 10 digits after +63; a pasted 0917… or +63 917… is cut down to 917….
+/// Keeps only the 10 digits after +63, spaced as 9XX XXX XXXX while typing; a pasted
+/// 0917… or +63 917… is cut down to 917…. The caret stays after the same digit.
 class _MobileDigits extends TextInputFormatter {
+  static final _nonDigit = RegExp(r'\D');
+
   @override
   TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
-    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
-    if (digits.length > 10 && digits.startsWith('63')) digits = digits.substring(2);
-    if (digits.startsWith('0')) digits = digits.substring(1);
+    final raw = newValue.text;
+    var digits = raw.replaceAll(_nonDigit, '');
+    var before = raw.substring(0, newValue.selection.end.clamp(0, raw.length)).replaceAll(_nonDigit, '').length;
+    // Backspace over a space: remove the digit before it instead.
+    if (digits == oldValue.text.replaceAll(_nonDigit, '') && raw.length < oldValue.text.length && before > 0) {
+      digits = digits.substring(0, before - 1) + digits.substring(before);
+      before--;
+    }
+    if (digits.length > 10 && digits.startsWith('63')) {
+      digits = digits.substring(2);
+      before -= 2;
+    }
+    if (digits.startsWith('0')) {
+      digits = digits.substring(1);
+      before -= 1;
+    }
     if (digits.length > 10) digits = digits.substring(0, 10);
-    return TextEditingValue(text: digits, selection: TextSelection.collapsed(offset: digits.length));
+    before = before.clamp(0, digits.length);
+    final text = [
+      digits.substring(0, digits.length.clamp(0, 3)),
+      if (digits.length > 3) digits.substring(3, digits.length.clamp(3, 6)),
+      if (digits.length > 6) digits.substring(6),
+    ].join(' ');
+    final offset = before + (before > 3 ? 1 : 0) + (before > 6 ? 1 : 0);
+    return TextEditingValue(text: text, selection: TextSelection.collapsed(offset: offset.clamp(0, text.length)));
   }
 }
+
+/// "917 123 4567" → "+639171234567".
+String _fullMobile(TextEditingController c) => '+63${c.text.replaceAll(' ', '').trim()}';
 
 String? _email(String? v, {bool required = false}) {
   final t = (v ?? '').trim();
@@ -88,6 +114,11 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
   late final Map<String, _PersonFields> _attendees = {for (final s in widget.seats) s: _PersonFields()};
   bool _busy = false;
   List<String> _serverErrors = const [];
+
+  /// No errors while people are still filling in the form: fields are checked when
+  /// Reserve seats is tapped, and from then on as they are corrected.
+  bool _triedSubmit = false;
+  AutovalidateMode get _validateMode => _triedSubmit ? AutovalidateMode.onUserInteraction : AutovalidateMode.disabled;
   Stream<Screening?>? _screening;
 
   @override
@@ -120,7 +151,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
           'firstName': _clean(_primary.first),
           'middleName': _clean(_primary.middle),
           'lastName': _clean(_primary.last),
-          'contactNo': '+63${_primary.contact.text.trim()}',
+          'contactNo': _fullMobile(_primary.contact),
           'email': _clean(_primary.email),
         },
         attendees: {
@@ -132,7 +163,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               'age': int.tryParse(e.value.age.text.trim()),
               'sex': e.value.sex,
               'companySchool': _clean(e.value.company),
-              'contactNo': '+63${e.value.contact.text.trim()}',
+              'contactNo': _fullMobile(e.value.contact),
               'email': _clean(e.value.email),
               'seniorCardNo': _clean(e.value.senior),
               'isPwd': e.value.isPwd,
@@ -142,7 +173,10 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
 
   Future<void> _submit(Screening screening) async {
     if (_busy) return;
-    setState(() => _serverErrors = const []);
+    setState(() {
+      _serverErrors = const [];
+      _triedSubmit = true;
+    });
     if (!_formKey.currentState!.validate()) {
       _toast('Please check the highlighted fields.');
       return;
@@ -362,7 +396,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
                         DropdownMenuItem(value: 'F', child: Text('Female')),
                       ],
                       validator: (v) => v == null ? 'Required' : null,
-                      autovalidateMode: AutovalidateMode.onUserInteraction,
+                      autovalidateMode: _validateMode,
                       onChanged: _busy ? null : (v) => setState(() => a.sex = v),
                     ),
                   ),
@@ -405,7 +439,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
         textCapitalization: capitalize ? TextCapitalization.words : TextCapitalization.none,
         autofillHints: autofill == null ? null : [autofill],
         textInputAction: TextInputAction.next,
-        autovalidateMode: AutovalidateMode.onUserInteraction,
+        autovalidateMode: _validateMode,
       ),
     );
   }
@@ -439,7 +473,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               inputFormatters: [_MobileDigits()],
               autofillHints: autofill == null ? null : [autofill],
               textInputAction: TextInputAction.next,
-              autovalidateMode: AutovalidateMode.onUserInteraction,
+              autovalidateMode: _validateMode,
             ),
           ),
         ],

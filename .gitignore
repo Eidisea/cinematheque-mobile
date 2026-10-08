@@ -61,3 +61,6 @@ ui-debug.log*
 
 # Server (Vercel) dependencies
 node_modules/
+
+# Vercel CLI link (deploys run from the repo root; the project Root Directory is server/)
+/.vercel/
