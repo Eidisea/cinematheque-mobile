@@ -140,21 +140,20 @@ void main() {
 
     testWidgets('shows the 120-seat map with availability and the running total', (tester) async {
       await openSeatMap(tester, screeningWith(holds: {'A1': confirmed, 'A2': unpaid(const Duration(minutes: -2))}));
-      expect(find.text('Choose seats'), findsOneWidget);
-      expect(find.text('119 of 120 seats available · up to 10 per booking'), findsOneWidget);
+      expect(find.text('SELECT YOUR SEATS'), findsOneWidget);
+      expect(find.text('119 of 120 left'), findsOneWidget);
       expect(find.bySemanticsLabel('Seat A1, taken'), findsOneWidget);
       expect(find.bySemanticsLabel('Seat A2, available'), findsOneWidget);
-      expect(find.text('No seats selected'), findsOneWidget);
+      expect(find.text('0 seats'), findsOneWidget);
 
       await tapSeat(tester, 'A2');
       await tapSeat(tester, 'A3');
-      expect(find.text('2 seats selected'), findsOneWidget);
-      expect(find.text('A2'), findsOneWidget); // selected-seat chips
-      expect(find.text('A3'), findsOneWidget);
+      expect(find.text('2 seats'), findsOneWidget);
+      expect(find.text('A2, A3'), findsOneWidget); // the summary's seat list
       expect(find.text('₱300'), findsOneWidget);
 
       await tapSeat(tester, 'A1'); // taken → nothing happens
-      expect(find.text('2 seats selected'), findsOneWidget);
+      expect(find.text('2 seats'), findsOneWidget);
     });
 
     testWidgets('11th seat is refused with a message', (tester) async {
@@ -163,7 +162,7 @@ void main() {
         await tapSeat(tester, 'B$n');
       }
       await tapSeat(tester, 'B11');
-      expect(find.text('10 seats selected'), findsOneWidget);
+      expect(find.text('10 seats'), findsOneWidget);
       expect(find.text('You can choose up to 10 seats per booking.'), findsOneWidget);
     });
 
@@ -171,12 +170,12 @@ void main() {
       await openSeatMap(tester, screeningWith());
       await tapSeat(tester, 'C4');
       await tapSeat(tester, 'C5');
-      expect(find.text('2 seats selected'), findsOneWidget);
+      expect(find.text('2 seats'), findsOneWidget);
 
       live.add(screeningWith(holds: {'C5': freePending})); // another customer just booked C5
       await tester.pumpAndSettle();
 
-      expect(find.text('1 seat selected'), findsOneWidget);
+      expect(find.text('1 seat'), findsOneWidget);
       expect(find.bySemanticsLabel('Seat C5, taken'), findsOneWidget);
       expect(find.textContaining('Seat C5 was just taken by someone else'), findsOneWidget);
     });
@@ -186,6 +185,8 @@ void main() {
       // form) sees the customer's OWN seats become taken. That must not be announced.
       await openSeatMap(tester, screeningWith());
       await tapSeat(tester, 'C4');
+      await tester.ensureVisible(find.widgetWithText(GoldButton, 'Continue'));
+      await tester.pumpAndSettle();
       await tester.tap(find.widgetWithText(GoldButton, 'Continue'));
       await tester.pumpAndSettle();
       expect(find.text("Who's coming?"), findsWidgets);

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../data/models/screening.dart';
 import '../../data/models/staff_member.dart';
 import '../auth/staff_session.dart';
 import '../navigation.dart';
+import '../staff_services.dart';
 import '../theme/staff_theme.dart';
 
-/// Layout around every signed-in page: sidebar navigation + top bar with the user menu.
+/// Layout around every signed-in page, as on the website's admin: a dark sidebar with the
+/// grouped navigation, and a slim top bar with the account menu.
 /// Wide screens (≥ 1024 px) keep the sidebar open; narrower screens use a drawer.
 class StaffShell extends StatelessWidget {
   const StaffShell({super.key, required this.session, required this.location, required this.child});
@@ -24,8 +27,7 @@ class StaffShell extends StatelessWidget {
 
     final content = Column(
       children: [
-        _TopBar(session: session, title: current.label, showMenuButton: !isWide),
-        const Divider(),
+        _TopBar(session: session, showMenuButton: !isWide),
         Expanded(child: child),
       ],
     );
@@ -34,8 +36,7 @@ class StaffShell extends StatelessWidget {
       return Scaffold(
         body: Row(
           children: [
-            SizedBox(width: 248, child: _Sidebar(current: current)),
-            const VerticalDivider(width: 1),
+            SizedBox(width: 224, child: _Sidebar(current: current)),
             Expanded(child: content),
           ],
         ),
@@ -44,7 +45,8 @@ class StaffShell extends StatelessWidget {
 
     return Scaffold(
       drawer: Drawer(
-        width: 272,
+        width: 248,
+        backgroundColor: StaffColors.sideBg,
         shape: const RoundedRectangleBorder(),
         child: _Sidebar(current: current, closeOnTap: true),
       ),
@@ -61,38 +63,41 @@ class _Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-
+    final services = StaffServices.of(context);
     return Material(
-      color: StaffColors.surface,
+      color: StaffColors.sideBg,
       child: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(12, 20, 12, 20),
+          padding: const EdgeInsets.fromLTRB(10, 16, 10, 16),
           children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Cinematheque',
-                      style: textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700, color: StaffColors.brand)),
-                  Text('Centre Davao · Staff', style: textTheme.bodySmall?.copyWith(color: StaffColors.textMuted)),
-                ],
-              ),
-            ),
+            const _Brand(),
             for (final section in staffNavigation) ...[
               if (section.title != null)
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(12, 16, 12, 6),
+                  padding: const EdgeInsets.fromLTRB(10, 16, 10, 4),
                   child: Text(
                     section.title!.toUpperCase(),
-                    style: textTheme.labelSmall?.copyWith(color: StaffColors.textMuted, letterSpacing: 0.8),
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w600, letterSpacing: 0.66, color: StaffColors.sideMuted),
                   ),
                 ),
               for (final item in section.items)
                 _NavTile(
                   item: item,
                   selected: item.path == current.path,
+                  // Free reservations waiting for approval, as on the website.
+                  count: item.path == '/reservations'
+                      ? StreamBuilder(
+                          stream: services.dashboard.watchPendingReservations(),
+                          builder: (context, snap) {
+                            final now = services.clock.now();
+                            final n = (snap.data ?? const [])
+                                .where((r) => r.screening.type == ScreeningType.free && r.screening.startAt.isAfter(now))
+                                .length;
+                            return n == 0 ? const SizedBox.shrink() : _Count(n);
+                          },
+                        )
+                      : null,
                   onTap: () {
                     if (closeOnTap) Navigator.of(context).pop();
                     context.go(item.path);
@@ -106,48 +111,155 @@ class _Sidebar extends StatelessWidget {
   }
 }
 
-class _NavTile extends StatelessWidget {
-  const _NavTile({required this.item, required this.selected, required this.onTap});
+/// The website admin's mark: a dark tile with a gold film frame and a mountain ridge.
+class _Brand extends StatelessWidget {
+  const _Brand();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 2, 8, 16),
+      child: Row(
+        children: [
+          SizedBox.square(dimension: 30, child: CustomPaint(painter: _BrandPainter())),
+          const SizedBox(width: 10),
+          const Flexible(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('CINEMATHEQUE',
+                      style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600, letterSpacing: 0.8)),
+                  Text('Centre Davao', style: TextStyle(color: StaffColors.sideMuted, fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _BrandPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 40;
+    canvas.scale(k);
+    canvas.drawRRect(RRect.fromLTRBR(1, 1, 39, 39, const Radius.circular(9)), Paint()..color = const Color(0xFF1F2937));
+    canvas.drawRRect(
+      RRect.fromLTRBR(7, 9, 33, 31, const Radius.circular(4)),
+      Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2
+        ..color = StaffColors.gold,
+    );
+    final ridge = Path()
+      ..moveTo(11, 27)
+      ..lineTo(16, 19)
+      ..lineTo(19, 23)
+      ..lineTo(23, 15)
+      ..lineTo(29, 27)
+      ..close();
+    canvas.drawPath(ridge, Paint()..color = Colors.white);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+class _Count extends StatelessWidget {
+  const _Count(this.n);
+
+  final int n;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      constraints: const BoxConstraints(minWidth: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
+      decoration: BoxDecoration(color: StaffColors.count, borderRadius: BorderRadius.circular(999)),
+      child: Text('$n',
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 11, height: 18 / 11, fontWeight: FontWeight.w600)),
+    );
+  }
+}
+
+class _NavTile extends StatefulWidget {
+  const _NavTile({required this.item, required this.selected, required this.onTap, this.count});
 
   final StaffNavItem item;
   final bool selected;
   final VoidCallback onTap;
+  final Widget? count;
+
+  @override
+  State<_NavTile> createState() => _NavTileState();
+}
+
+class _NavTileState extends State<_NavTile> {
+  bool _hover = false;
 
   @override
   Widget build(BuildContext context) {
-    final color = selected ? StaffColors.brand : StaffColors.text;
+    final selected = widget.selected;
+    final color = selected || _hover ? Colors.white : StaffColors.sideFg;
+    final count = widget.count;
 
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 1),
       child: Semantics(
         selected: selected,
         button: true,
-        child: Material(
-          color: selected ? StaffColors.brandTint : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          child: InkWell(
-            borderRadius: BorderRadius.circular(8),
-            onTap: onTap,
-            child: Container(
-              height: 40,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-              decoration: selected
-                  ? const BoxDecoration(border: Border(left: BorderSide(color: StaffColors.gold, width: 3)))
-                  : null,
-              child: Row(
-                children: [
-                  Icon(item.icon, size: 20, color: color),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(item.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(color: color, fontWeight: selected ? FontWeight.w600 : FontWeight.w500)),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Material(
+              color: selected ? StaffColors.sideActive : (_hover ? StaffColors.sideHover : Colors.transparent),
+              borderRadius: BorderRadius.circular(6),
+              child: InkWell(
+                borderRadius: BorderRadius.circular(6),
+                onTap: widget.onTap,
+                onHover: (h) => setState(() => _hover = h),
+                child: Container(
+                  height: 36,
+                  padding: const EdgeInsets.symmetric(horizontal: 10),
+                  child: Row(
+                    children: [
+                      Icon(widget.item.icon, size: 17, color: color.withValues(alpha: 0.85)),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(widget.item.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                                color: color, fontSize: 14, fontWeight: selected ? FontWeight.w500 : FontWeight.w400)),
+                      ),
+                      ?count,
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
-          ),
+            if (selected)
+              const Positioned(
+                left: -10,
+                top: 6,
+                bottom: 6,
+                child: SizedBox(
+                  width: 3,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.horizontal(right: Radius.circular(3)),
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -155,10 +267,9 @@ class _NavTile extends StatelessWidget {
 }
 
 class _TopBar extends StatelessWidget {
-  const _TopBar({required this.session, required this.title, required this.showMenuButton});
+  const _TopBar({required this.session, required this.showMenuButton});
 
   final StaffSession session;
-  final String title;
   final bool showMenuButton;
 
   @override
@@ -167,27 +278,26 @@ class _TopBar extends StatelessWidget {
       color: StaffColors.surface,
       child: SafeArea(
         bottom: false,
-        child: SizedBox(
-          height: 60,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            child: Row(
-              children: [
-                if (showMenuButton)
-                  IconButton(
-                    tooltip: 'Open navigation',
-                    icon: const Icon(Icons.menu),
-                    onPressed: () => Scaffold.of(context).openDrawer(),
+        child: Container(
+          height: 56,
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: StaffColors.border))),
+          child: Row(
+            children: [
+              if (showMenuButton)
+                IconButton(
+                  tooltip: 'Open navigation',
+                  style: IconButton.styleFrom(
+                    foregroundColor: StaffColors.gray700,
+                    side: const BorderSide(color: StaffColors.borderStrong),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
                   ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(title,
-                      overflow: TextOverflow.ellipsis,
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w600)),
+                  icon: const Icon(Icons.menu, size: 20),
+                  onPressed: () => Scaffold.of(context).openDrawer(),
                 ),
-                _UserMenu(session: session),
-              ],
-            ),
+              const Spacer(),
+              _UserMenu(session: session),
+            ],
           ),
         ),
       ),
@@ -237,8 +347,8 @@ class _UserMenu extends StatelessWidget {
           children: [
             CircleAvatar(
               radius: 16,
-              backgroundColor: StaffColors.brandTint,
-              child: Text(initials, style: const TextStyle(fontSize: 12, color: StaffColors.brand, fontWeight: FontWeight.w700)),
+              backgroundColor: StaffColors.brand,
+              child: Text(initials, style: const TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.w600)),
             ),
             if (MediaQuery.sizeOf(context).width >= 600) ...[
               const SizedBox(width: 8),

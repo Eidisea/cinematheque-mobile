@@ -6,6 +6,8 @@ import 'package:ccd_mobile/staff/staff_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'fake_dashboard.dart';
+
 /// A session we control directly — no Firebase involved.
 class FakeStaffSession extends StaffSession {
   StaffSessionStatus _status = StaffSessionStatus.signedOut;
@@ -71,7 +73,7 @@ void main() {
       expect(staffRedirect(StaffSessionStatus.signedIn, u('/login')), '/');
       expect(staffRedirect(StaffSessionStatus.signedIn, u('/login?from=%2Freservations')), '/reservations');
       expect(staffRedirect(StaffSessionStatus.signedIn, u('/loading?from=%2Freports')), '/reports');
-      expect(staffRedirect(StaffSessionStatus.signedIn, u('/admission')), isNull);
+      expect(staffRedirect(StaffSessionStatus.signedIn, u('/attendance')), isNull);
     });
 
     test('return locations must stay on this site', () {
@@ -89,7 +91,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final session = FakeStaffSession();
-      await tester.pumpWidget(StaffApp(startup: ready, session: session));
+      await tester.pumpWidget(StaffApp(startup: ready, session: session, dashboard: FakeDashboardRepository()));
       await tester.pumpAndSettle();
       return session;
     }
@@ -133,8 +135,8 @@ void main() {
       await tester.tap(find.widgetWithText(FilledButton, 'Sign in'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Welcome, Ana'), findsOneWidget);
-      for (final label in ['OPERATIONS', 'INSIGHTS', 'SETTINGS', 'Screenings', 'Reservations', 'Admission', 'Reports', 'Movies', 'Seat layout', 'Staff accounts']) {
+      expect(find.text('NEXT 7 DAYS'), findsOneWidget, reason: 'the dashboard');
+      for (final label in ['OPERATIONS', 'INSIGHTS', 'SETTINGS', 'Attendance', 'Reservations', 'Reports', 'Film catalog', 'Staff accounts']) {
         expect(find.text(label), findsWidgets, reason: label);
       }
 
@@ -155,7 +157,7 @@ void main() {
       final session = await pumpApp(tester);
       session.setState(StaffSessionStatus.signedIn, staff: FakeStaffSession.member);
       await tester.pumpAndSettle();
-      expect(find.text('Welcome, Ana'), findsOneWidget);
+      expect(find.text('NEXT 7 DAYS'), findsOneWidget, reason: 'the dashboard');
 
       session.setState(StaffSessionStatus.signedOut, notice: 'This staff account has been deactivated.');
       await tester.pumpAndSettle();
@@ -171,9 +173,9 @@ void main() {
       await tester.tap(find.byTooltip('Open navigation'));
       await tester.pumpAndSettle();
       expect(find.text('OPERATIONS'), findsOneWidget);
-      await tester.tap(find.text('Admission'));
+      await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('Attendance')));
       await tester.pumpAndSettle();
-      expect(find.text('Admit moviegoers at the door and record attendance'), findsOneWidget);
+      expect(find.text('Screenings, how each one is booked, and admitting moviegoers at the door'), findsOneWidget);
     });
   });
 }

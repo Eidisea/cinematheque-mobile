@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../data/models/screening.dart';
 import '../theme/customer_theme.dart';
 import 'brand.dart';
 
@@ -42,11 +43,41 @@ class PosterImage extends StatelessWidget {
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stack) => art,
                   // Generated art until the real poster's first frame arrives, then a short fade.
-                  frameBuilder: (context, child, frame, sync) => sync
-                      ? child
-                      : AnimatedSwitcher(duration: Motion.medium, child: frame == null ? art : child),
+                  frameBuilder: (context, child, frame, sync) =>
+                      sync ? child : AnimatedSwitcher(duration: Motion.medium, child: frame == null ? art : child),
                 ),
         ),
+      ),
+    );
+  }
+}
+
+/// The poster resting on the website's gold offset block.
+class PosterOnBlock extends StatelessWidget {
+  const PosterOnBlock({super.key, required this.screening, required this.width, this.offset = 10});
+
+  final Screening screening;
+  final double width;
+  final double offset;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: EdgeInsets.only(right: offset, bottom: offset),
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Positioned(
+            left: offset,
+            top: offset,
+            right: -offset,
+            bottom: -offset,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: CustomerColors.gold, borderRadius: BorderRadius.circular(Radii.md)),
+            ),
+          ),
+          PosterImage(url: screening.movie?.posterUrl, title: screening.movie?.title ?? screening.eventTitle, width: width),
+        ],
       ),
     );
   }

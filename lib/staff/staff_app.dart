@@ -5,16 +5,21 @@ import '../core/firebase_bootstrap.dart';
 import 'auth/staff_session.dart';
 import 'staff_router.dart';
 import 'theme/staff_theme.dart';
+import '../core/clock.dart';
+import 'data/dashboard_repository.dart';
+import 'staff_services.dart';
 
 /// Staff app (Flutter Web). Staff sign in with Firebase Authentication and must have an
 /// active staff record; every page except /login is protected by the router.
 class StaffApp extends StatefulWidget {
-  const StaffApp({super.key, required this.startup, this.session});
+  const StaffApp({super.key, required this.startup, this.session, this.dashboard, this.clock = const Clock()});
 
   final FirebaseStartup startup;
 
-  /// Tests pass a fake session; the real app creates a Firebase one.
+  /// Tests pass fakes; the real app signs in with Firebase and reads Firestore.
   final StaffSession? session;
+  final DashboardRepository? dashboard;
+  final Clock clock;
 
   @override
   State<StaffApp> createState() => _StaffAppState();
@@ -23,6 +28,7 @@ class StaffApp extends StatefulWidget {
 class _StaffAppState extends State<StaffApp> {
   StaffSession? _session;
   GoRouter? _router;
+  DashboardRepository? _dashboard;
 
   @override
   void initState() {
@@ -30,6 +36,7 @@ class _StaffAppState extends State<StaffApp> {
     if (widget.startup.isReady || widget.session != null) {
       _session = widget.session ?? FirebaseStaffSession();
       _router = buildStaffRouter(_session!);
+      _dashboard = widget.dashboard ?? FirestoreDashboardRepository();
     }
   }
 
@@ -52,12 +59,16 @@ class _StaffAppState extends State<StaffApp> {
       );
     }
 
-    return MaterialApp.router(
-      title: 'CCD Staff',
-      debugShowCheckedModeBanner: false,
-      theme: buildStaffTheme(),
-      themeMode: ThemeMode.light,
-      routerConfig: router,
+    return StaffServices(
+      dashboard: _dashboard!,
+      clock: widget.clock,
+      child: MaterialApp.router(
+        title: 'CCD Staff',
+        debugShowCheckedModeBanner: false,
+        theme: buildStaffTheme(),
+        themeMode: ThemeMode.light,
+        routerConfig: router,
+      ),
     );
   }
 }

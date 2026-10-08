@@ -13,6 +13,7 @@ import '../seat_map/seat_map_logic.dart';
 import '../theme/customer_theme.dart';
 import '../widgets/booking_steps.dart';
 import '../widgets/brand.dart';
+import '../widgets/poster.dart';
 import '../widgets/state_views.dart';
 
 /// Step 1 of booking: choose up to 10 seats on the live seat map.
@@ -100,9 +101,11 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     // to the details form, a change here is usually their OWN booking claiming the seats;
     // real conflicts are reported by the server when they submit.
     if (lost.isNotEmpty && (ModalRoute.of(context)?.isCurrent ?? true)) {
-      _toast(lost.length == 1
-          ? 'Seat ${lost.first} was just taken by someone else, so it was removed from your selection.'
-          : 'Seats ${lost.join(', ')} were just taken by someone else, so they were removed from your selection.');
+      _toast(
+        lost.length == 1
+            ? 'Seat ${lost.first} was just taken by someone else, so it was removed from your selection.'
+            : 'Seats ${lost.join(', ')} were just taken by someone else, so they were removed from your selection.',
+      );
     }
   }
 
@@ -153,26 +156,14 @@ class _SeatSelectionScreenState extends State<SeatSelectionScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
-        title: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('Choose seats'),
-            if (_screening != null)
-              Text(
-                '${_screening!.eventTitle} · ${formatDateShort(_screening!.startAt)}, ${formatTime(_screening!.startAt)}',
-                overflow: TextOverflow.ellipsis,
-                style: Theme.of(context).textTheme.bodySmall?.copyWith(color: CustomerColors.muted),
-              ),
-          ],
-        ),
-      ),
+      appBar: AppBar(title: Text(_screening?.eventTitle ?? 'Choose seats', overflow: TextOverflow.ellipsis)),
       body: body,
-      bottomNavigationBar: map == null ? null : _SelectionBar(map: map),
     );
   }
 }
 
+/// As on the website: the steps, the seat map card, then the "Your screening" summary
+/// with the Continue button.
 class _SeatMapBody extends StatelessWidget {
   const _SeatMapBody({required this.map, required this.onSeatTap});
 
@@ -183,35 +174,81 @@ class _SeatMapBody extends StatelessWidget {
   Widget build(BuildContext context) {
     final available = map.availableCount;
     return ListView(
-      padding: const EdgeInsets.fromLTRB(Space.md, Space.sm, Space.md, Space.xl),
+      padding: const EdgeInsets.fromLTRB(Space.lg, Space.sm, Space.lg, Space.xxl),
       children: [
         ContentWidth(
           maxWidth: 560,
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: Space.sm),
-                child: BookingSteps(current: 0, paid: map.screening.isPaid),
+              BookingSteps(current: 0, paid: map.screening.isPaid),
+              const SizedBox(height: Space.xl),
+              if (map.isClosed) ...[
+                const _Notice(icon: Icons.lock_clock_outlined, text: 'This screening has started. Booking is closed.'),
+                const SizedBox(height: Space.lg),
+              ] else if (available == 0 && map.selected.isEmpty) ...[
+                const _Notice(icon: Icons.event_busy_outlined, text: 'All seats have been reserved.'),
+                const SizedBox(height: Space.lg),
+              ],
+              _Card(
+                padding: const EdgeInsets.fromLTRB(8, 18, 8, 16),
+                child: Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.baseline,
+                        textBaseline: TextBaseline.alphabetic,
+                        children: [
+                          Expanded(
+                            child: Semantics(
+                              header: true,
+                              child: Text('SELECT YOUR SEATS', style: CcdType.display(24, spacing: 0.5)),
+                            ),
+                          ),
+                          const SizedBox(width: Space.md),
+                          Text(
+                            '$available of ${map.layout.activeCount} left',
+                            style: const TextStyle(color: CustomerColors.muted, fontSize: 12.5),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: Space.lg),
+                    SeatGrid(state: map, onTap: onSeatTap),
+                    const SizedBox(height: 14),
+                    const SeatLegend(),
+                  ],
+                ),
               ),
               const SizedBox(height: Space.xl),
-              if (map.isClosed)
-                const _Notice(icon: Icons.lock_clock_outlined, text: 'This screening has started. Booking is closed.')
-              else if (available == 0 && map.selected.isEmpty)
-                const _Notice(icon: Icons.event_busy_outlined, text: 'All seats have been reserved.')
-              else
-                Text(
-                  '$available of ${map.layout.activeCount} seats available · up to ${BookingRules.maxSeatsPerReservation} per booking',
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: CustomerColors.muted, fontSize: 13),
-                ),
-              const SizedBox(height: Space.xl),
-              SeatGrid(state: map, onTap: onSeatTap),
-              const SizedBox(height: Space.xl),
-              const SeatLegend(),
+              _Summary(map: map),
             ],
           ),
         ),
       ],
+    );
+  }
+}
+
+/// White card with the website's soft shadow.
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.padding = EdgeInsets.zero});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: padding,
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: CustomerColors.surface,
+        borderRadius: BorderRadius.circular(Radii.lg),
+        boxShadow: const [BoxShadow(color: Color(0x2E141219), blurRadius: 20, spreadRadius: -10, offset: Offset(0, 6))],
+      ),
+      child: child,
     );
   }
 }
@@ -231,88 +268,149 @@ class _Notice extends StatelessWidget {
         children: [
           Icon(icon, color: CustomerColors.danger),
           const SizedBox(width: 10),
-          Expanded(child: Text(text, style: const TextStyle(color: CustomerColors.danger))),
+          Expanded(
+            child: Text(text, style: const TextStyle(color: CustomerColors.danger)),
+          ),
         ],
       ),
     );
   }
 }
 
-/// Sticky summary: which seats, how many, total, and Continue.
-class _SelectionBar extends StatelessWidget {
-  const _SelectionBar({required this.map});
+/// "Your screening": the poster on a gold block, the seats picked, price and total, and
+/// Continue — the website's summary card.
+class _Summary extends StatelessWidget {
+  const _Summary({required this.map});
 
   final SeatMapState map;
 
   @override
   Widget build(BuildContext context) {
+    final screening = map.screening;
     final seats = map.selectedInOrder;
     final count = seats.length;
+    final price = screening.priceCentavos;
 
-    return BottomActionBar(
+    Widget line(String label, String value) => Padding(
+      padding: const EdgeInsets.only(bottom: 6),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label, style: const TextStyle(fontSize: 13.5, color: CustomerColors.muted)),
+          const SizedBox(width: Space.md),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w500),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    return _Card(
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      count == 0 ? 'No seats selected' : '$count ${count == 1 ? 'seat' : 'seats'} selected',
-                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700),
-                    ),
-                    const SizedBox(height: 4),
-                    if (count == 0)
-                      const Text('Tap a seat to select it.', style: TextStyle(color: CustomerColors.muted, fontSize: 13))
-                    else
-                      Semantics(
-                        label: seats.join(', '),
-                        excludeSemantics: true,
-                        child: Wrap(
-                          spacing: 4,
-                          runSpacing: 4,
-                          children: [
-                            for (final s in seats)
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                                decoration: BoxDecoration(color: CustomerColors.goldTint, borderRadius: BorderRadius.circular(6)),
-                                child: Text(s, style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w700)),
-                              ),
-                          ],
+          Container(
+            color: CustomerColors.stub,
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                PosterOnBlock(screening: screening, width: 104),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'YOUR SCREENING',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.9,
+                            color: CustomerColors.goldText,
+                          ),
                         ),
-                      ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: Space.md),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  const Text('TOTAL', style: TextStyle(color: CustomerColors.faint, fontSize: 10.5, letterSpacing: 1.4, fontWeight: FontWeight.w600)),
-                  AnimatedSwitcher(
-                    duration: Motion.fast,
-                    transitionBuilder: (child, a) => FadeTransition(opacity: a, child: SizeTransition(sizeFactor: a, axis: Axis.horizontal, child: child)),
-                    child: Text(
-                      map.screening.isPaid ? formatPeso(map.totalCentavos) : 'Free',
-                      key: ValueKey(map.totalCentavos),
-                      style: CcdType.money(24),
+                        const SizedBox(height: 4),
+                        Text(screening.eventTitle.toUpperCase(), style: CcdType.display(22, spacing: 0.4)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${formatDateShort(screening.startAt)} · ${formatTime(screening.startAt)}',
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        const Text('Cinematheque Centre Davao', style: TextStyle(fontSize: 12, color: CustomerColors.muted)),
+                      ],
                     ),
                   ),
-                ],
-              ),
-            ],
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: Space.md),
-          GoldButton(
-            label: 'Continue',
-            icon: Icons.arrow_forward_rounded,
-            onPressed: map.canContinue
-                ? () => context.push('/screenings/${map.screening.id}/details', extra: map.selectedInOrder)
-                : null,
+          const Perforation(horizontal: true, inset: 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Semantics(
+                  label: count == 0 ? 'No seats selected' : 'Seats ${seats.join(', ')}',
+                  excludeSemantics: true,
+                  child: line('Seats', count == 0 ? '—' : seats.join(', ')),
+                ),
+                line('Price', screening.isPaid && price != null ? '${formatPeso(price)} per seat' : 'Free'),
+                const SizedBox(height: 6),
+                const Perforation(horizontal: true, inset: 0),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(
+                        child: Text(
+                          '$count ${count == 1 ? 'seat' : 'seats'}',
+                          style: const TextStyle(fontSize: 13.5, color: CustomerColors.muted),
+                        ),
+                      ),
+                      AnimatedSwitcher(
+                        duration: Motion.fast,
+                        child: Text(
+                          screening.isPaid ? formatPeso(map.totalCentavos) : 'Free',
+                          key: ValueKey(map.totalCentavos),
+                          style: CcdType.money(22),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                GoldButton(
+                  label: 'Continue',
+                  icon: Icons.arrow_forward_rounded,
+                  onPressed: map.canContinue
+                      ? () => context.push('/screenings/${screening.id}/details', extra: map.selectedInOrder)
+                      : null,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'Up to ${BookingRules.maxSeatsPerReservation} seats. The first seat you pick is yours.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5, color: CustomerColors.muted),
+                ),
+              ],
+            ),
           ),
         ],
       ),

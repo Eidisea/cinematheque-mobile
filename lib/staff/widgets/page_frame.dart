@@ -12,24 +12,27 @@ class PageFrame extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final textTheme = Theme.of(context).textTheme;
-    final pad = MediaQuery.sizeOf(context).width < 600 ? 16.0 : 32.0;
+    final pad = MediaQuery.sizeOf(context).width < 600 ? 16.0 : 24.0;
 
+    // As on the website's admin: 20 px from the top bar, a 22 px title, little else.
     return SingleChildScrollView(
-      padding: EdgeInsets.fromLTRB(pad, 24, pad, 32),
+      padding: EdgeInsets.fromLTRB(pad, 20, pad, 40),
       child: Align(
         alignment: Alignment.topLeft,
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1200),
+          constraints: const BoxConstraints(maxWidth: 1440),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.w600)),
+              Semantics(
+                header: true,
+                child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w600, height: 1.3)),
+              ),
               if (subtitle != null) ...[
-                const SizedBox(height: 4),
-                Text(subtitle!, style: textTheme.bodyMedium?.copyWith(color: StaffColors.textMuted)),
+                const SizedBox(height: 2),
+                Text(subtitle!, style: const TextStyle(fontSize: 14, color: StaffColors.textMuted)),
               ],
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
               ...children,
             ],
           ),

@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 
-/// Staff navigation, grouped by TASK (not one item per database collection).
-/// Payment status lives inside Reservations; the admission checklist lives in Admission.
+/// Staff navigation, grouped by TASK (not one item per database collection) — the same
+/// menu as the website's admin. Payment status lives inside Reservations; checking people
+/// in at the door lives in Attendance. Seats are fixed at 120, so there is no seat page.
 class StaffNavItem {
   const StaffNavItem({required this.label, required this.path, required this.icon, required this.summary});
 
   final String label;
   final String path;
   final IconData icon;
-  final String summary; // shown on the page header
+  final String summary; // what the page is for (shown while the page is not built yet)
 }
 
 class StaffNavSection {
@@ -29,10 +30,10 @@ const staffNavigation = <StaffNavSection>[
   ]),
   StaffNavSection(title: 'Operations', items: [
     StaffNavItem(
-      label: 'Screenings',
-      path: '/screenings',
-      icon: Icons.event_outlined,
-      summary: 'Schedule screenings and see how each one is booked',
+      label: 'Attendance',
+      path: '/attendance',
+      icon: Icons.fact_check_outlined,
+      summary: 'Screenings, how each one is booked, and admitting moviegoers at the door',
     ),
     StaffNavItem(
       label: 'Reservations',
@@ -40,38 +41,26 @@ const staffNavigation = <StaffNavSection>[
       icon: Icons.confirmation_number_outlined,
       summary: 'Find bookings, check payment status, approve or cancel',
     ),
-    StaffNavItem(
-      label: 'Admission',
-      path: '/admission',
-      icon: Icons.how_to_reg_outlined,
-      summary: 'Admit moviegoers at the door and record attendance',
-    ),
   ]),
   StaffNavSection(title: 'Insights', items: [
     StaffNavItem(
       label: 'Reports',
       path: '/reports',
-      icon: Icons.insights_outlined,
+      icon: Icons.bar_chart_rounded,
       summary: 'Reservations vs. attendance, payments, exports',
     ),
   ]),
   StaffNavSection(title: 'Settings', items: [
     StaffNavItem(
-      label: 'Movies',
-      path: '/settings/movies',
-      icon: Icons.movie_outlined,
-      summary: 'Film catalog and posters',
-    ),
-    StaffNavItem(
-      label: 'Seat layout',
-      path: '/settings/seats',
-      icon: Icons.event_seat_outlined,
-      summary: 'The 120-seat hall layout',
+      label: 'Film catalog',
+      path: '/settings/films',
+      icon: Icons.menu_book_outlined,
+      summary: 'Films and posters',
     ),
     StaffNavItem(
       label: 'Staff accounts',
       path: '/settings/staff',
-      icon: Icons.badge_outlined,
+      icon: Icons.person_outline_rounded,
       summary: 'AVT and PDO accounts',
     ),
   ]),
@@ -79,7 +68,7 @@ const staffNavigation = <StaffNavSection>[
 
 Iterable<StaffNavItem> get allStaffNavItems => staffNavigation.expand((s) => s.items);
 
-/// The nav item for a location ("/settings/movies/123" → Movies).
+/// The nav item for a location ("/settings/films/123" → Film catalog).
 StaffNavItem navItemFor(String location) {
   StaffNavItem best = allStaffNavItems.first;
   for (final item in allStaffNavItems) {

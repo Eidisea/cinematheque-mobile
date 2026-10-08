@@ -7,6 +7,7 @@ import '../theme/customer_theme.dart';
 import '../widgets/brand.dart';
 import '../widgets/motion.dart';
 import '../widgets/screening_card.dart';
+import '../widgets/spotlight_banner.dart';
 import '../widgets/state_views.dart';
 
 enum _TypeFilter { all, free, paid }
@@ -127,7 +128,18 @@ class _ScreeningsScreenState extends State<ScreeningsScreen> {
                 controller: _scroll,
                 slivers: [
                   SliverToBoxAdapter(
-                    child: _Hero(search: _search, onSearch: (v) => setState(() => _query = v.trim()), query: _query),
+                    child: _Hero(
+                      search: _search,
+                      onSearch: (v) => setState(() => _query = v.trim()),
+                      query: _query,
+                      banner: !SpotlightBanner.enabled || upcoming == null || upcoming.isEmpty
+                          ? null
+                          : SpotlightBanner(
+                              screenings: SpotlightBanner.featured(upcoming, now),
+                              now: now,
+                              onOpen: (s) => context.push('/screenings/${s.id}'),
+                            ),
+                    ),
                   ),
                   SliverToBoxAdapter(
                     child: ContentWidth(
@@ -157,11 +169,14 @@ class _ScreeningsScreenState extends State<ScreeningsScreen> {
 /// Light hero (Laravel): paper with soft purple/gold glows, the Davao skyline at the
 /// bottom, gold eyebrow and a big condensed title. The search card overlaps its edge.
 class _Hero extends StatelessWidget {
-  const _Hero({required this.search, required this.onSearch, required this.query});
+  const _Hero({required this.search, required this.onSearch, required this.query, this.banner});
 
   final TextEditingController search;
   final ValueChanged<String> onSearch;
   final String query;
+
+  /// The website's spotlight banner, between the wordmark and the title.
+  final Widget? banner;
 
   @override
   Widget build(BuildContext context) {
@@ -181,44 +196,58 @@ class _Hero extends StatelessWidget {
               const Positioned(left: -60, top: -40, child: _Glow(color: Color(0x1F580076), size: 260)),
               const Positioned(right: -70, top: 40, child: _Glow(color: Color(0x2EEBBC00), size: 240)),
               const Positioned(left: 0, right: 0, bottom: 0, child: DavaoSkyline(height: 70, opacity: 0.09)),
-              ContentWidth(
-                child: Padding(
-                  padding: EdgeInsets.fromLTRB(Space.gutter, top + Space.lg, Space.gutter, 64),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+              Column(
+                children: [
+                  ContentWidth(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(Space.gutter, top + Space.lg, Space.gutter, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const BrandMark(size: 34),
-                          const SizedBox(width: 10),
-                          // The wordmark shrinks rather than overflowing at very large text sizes.
-                          Flexible(
-                            child: FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text('CINEMATHEQUE', style: CcdType.display(17, spacing: 1.6)),
-                                  Text('CENTRE DAVAO', style: CcdType.eyebrow.copyWith(fontSize: 9.5, letterSpacing: 2.2)),
-                                ],
+                          Row(
+                            children: [
+                              const BrandMark(size: 34),
+                              const SizedBox(width: 10),
+                              // The wordmark shrinks rather than overflowing at very large text sizes.
+                              Flexible(
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  alignment: Alignment.centerLeft,
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text('CINEMATHEQUE', style: CcdType.display(17, spacing: 1.6)),
+                                      Text('CENTRE DAVAO', style: CcdType.eyebrow.copyWith(fontSize: 9.5, letterSpacing: 2.2)),
+                                    ],
+                                  ),
+                                ),
                               ),
-                            ),
+                            ],
                           ),
                         ],
                       ),
-                      const SizedBox(height: Space.xxl),
-                      const Eyebrow('FDCP · Davao City · Philippine cinema'),
-                      const SizedBox(height: 6),
-                      Semantics(header: true, child: Text('NOW SHOWING', style: CcdType.display(44, spacing: 1.2))),
-                      const SizedBox(height: Space.sm),
-                      const Text(
-                        'Screenings, retrospectives and talks. Reserve your seats — no account needed.',
-                        style: TextStyle(fontSize: 14.5, height: 1.5, color: CustomerColors.muted),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
+                  if (banner != null) ...[const SizedBox(height: Space.xl), ContentWidth(maxWidth: 720, child: banner!)],
+                  ContentWidth(
+                    child: Padding(
+                      padding: const EdgeInsets.fromLTRB(Space.gutter, Space.xxl, Space.gutter, 64),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Eyebrow('FDCP · Davao City · Philippine cinema'),
+                          const SizedBox(height: 6),
+                          Semantics(header: true, child: Text('NOW SHOWING', style: CcdType.display(44, spacing: 1.2))),
+                          const SizedBox(height: Space.sm),
+                          const Text(
+                            'Screenings, retrospectives and talks. Reserve your seats — no account needed.',
+                            style: TextStyle(fontSize: 14.5, height: 1.5, color: CustomerColors.muted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),

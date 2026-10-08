@@ -177,6 +177,8 @@ Future<void> openDetailsForm(WidgetTester tester) async {
     await tester.tap(find.byKey(ValueKey('seat-$s')));
     await tester.pumpAndSettle();
   }
+  await tester.ensureVisible(find.widgetWithText(GoldButton, 'Continue'));
+  await tester.pumpAndSettle();
   await tester.tap(find.widgetWithText(GoldButton, 'Continue'));
   await tester.pumpAndSettle();
 }
@@ -294,7 +296,7 @@ void main() {
       expect(find.textContaining('Seat A2 was just reserved by someone else'), findsOneWidget);
       await tester.tap(find.text('Choose seats').last);
       await tester.pumpAndSettle();
-      expect(find.text('Choose seats'), findsOneWidget, reason: 'seat map title');
+      expect(find.text('SELECT YOUR SEATS'), findsOneWidget, reason: 'back on the seat map');
       expect(h.saved.bookings, isEmpty);
     });
 
