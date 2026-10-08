@@ -138,6 +138,8 @@ describe('checkout', () => {
     const attrs = pm.created[0];
     assert.deepEqual(attrs.line_items, [{ name: 'Screening paid1 · admission', amount: 15000, currency: 'PHP', quantity: 2 }]);
     assert.deepEqual(attrs.metadata, { reservationId: id });
+    assert.deepEqual(attrs.billing, { name: 'Juan Dela Cruz', email: 'juan@example.com', phone: '+639171234567' },
+      'PayMongo billing fields filled in from the booker');
     assert.match(attrs.reference_number, /^CCD-/);
     assert.equal(attrs.success_url, `${RETURN_URL}?result=paid`);
     assert.equal((await db.doc(`payments/${id}`).get()).data().checkoutSessionId, 'cs_test_1');

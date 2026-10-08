@@ -62,7 +62,14 @@ export async function startCheckout(db, paymongo, { accessKey, returnUrl, now = 
   const seats = r.seatLabels.length;
   const perSeat = payment.amountCentavos / seats;
   const name = `${r.screening.eventTitle} · admission`;
+  const b = r.booker;
   const session = await paymongo.createCheckoutSession({
+    // Fills in PayMongo's billing fields with the booker's details (it always asks for them).
+    billing: {
+      name: [b.firstName, b.middleName, b.lastName].filter(Boolean).join(' '),
+      email: b.email,
+      phone: b.contactNo,
+    },
     line_items: Number.isInteger(perSeat)
       ? [{ name, amount: perSeat, currency: 'PHP', quantity: seats }]
       : [{ name, amount: payment.amountCentavos, currency: 'PHP', quantity: 1 }],
