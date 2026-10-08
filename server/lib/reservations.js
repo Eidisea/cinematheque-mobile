@@ -118,7 +118,15 @@ export async function createReservation(
       tx.create(reservationRef, reservation);
       if (payment) tx.create(db.collection('payments').doc(reservationRef.id), payment);
       tx.create(db.collection('bookingViews').doc(accessKey), bookingViewOf(reservation, payment));
-      created = { bookingReference, accessKey, status: 'pending', requiresPayment: paid, totalCentavos, expiresAt: deadline };
+      created = {
+        reservationId: reservationRef.id, // for the server only — the API does not return it
+        bookingReference,
+        accessKey,
+        status: 'pending',
+        requiresPayment: paid,
+        totalCentavos,
+        expiresAt: deadline,
+      };
     },
   });
 

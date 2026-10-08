@@ -1,3 +1,4 @@
+import { sendStatusEmail } from '../../lib/email.js';
 import { getDb } from '../../lib/firebase.js';
 import { HttpError, endpoint } from '../../lib/http.js';
 import { ReservationError, cancelReservation, findReservationIdByAccessKey } from '../../lib/reservations.js';
@@ -10,7 +11,9 @@ export default endpoint({ methods: ['POST'] }, async (body) => {
   const reservationId = await findReservationIdByAccessKey(db, body.accessKey);
   if (!reservationId) throw new HttpError(404, 'not_found');
   try {
-    return { body: await cancelReservation(db, { reservationId, reason: 'customer_cancelled' }) };
+    const outcome = await cancelReservation(db, { reservationId, reason: 'customer_cancelled' });
+    await sendStatusEmail(db, reservationId);
+    return { body: outcome };
   } catch (e) {
     if (e instanceof ReservationError) throw new HttpError(e.code === 'not_found' ? 404 : 409, e.code);
     throw e;

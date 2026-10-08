@@ -11,6 +11,7 @@
 
 import { Timestamp } from 'firebase-admin/firestore';
 
+import { sendStatusEmail } from './email.js';
 import { paidPaymentOf } from './paymongo.js';
 import { ReservationError, bookingViewOf, cancelReservation, findReservationIdByAccessKey } from './reservations.js';
 import { confirmSeats } from './seat-holds.js';
@@ -83,7 +84,7 @@ export async function startCheckout(db, paymongo, { accessKey, returnUrl, now = 
  * Records what PayMongo reports for [session] (already fetched from PayMongo with our key).
  * Outcomes: unpaid · confirmed · late_needs_refund · already_recorded · amount_mismatch · not_paid_booking
  */
-export async function settlePayment(db, { reservationId, session, now = new Date() }) {
+export async function settlePayment(db, { reservationId, session, now = new Date(), mailer }) {
   const paid = paidPaymentOf(session);
   if (!paid) return { outcome: 'unpaid' };
 
@@ -99,6 +100,7 @@ export async function settlePayment(db, { reservationId, session, now = new Date
     reservationId,
     seatLabels,
     inTransaction: async (tx, { lost }) => {
+      cancelAfter = false; // reset on every attempt — a retried transaction starts over
       const [resSnap, paySnap] = await Promise.all([tx.get(ref.reservation), tx.get(ref.payment)]);
       const r = resSnap.data();
       const payment = paySnap.exists ? paySnap.data() : null;
@@ -149,6 +151,9 @@ export async function settlePayment(db, { reservationId, session, now = new Date
   });
 
   if (cancelAfter) await cancelExpired(db, reservationId, now);
+  if (outcome === 'confirmed' || outcome === 'late_needs_refund') {
+    await sendStatusEmail(db, reservationId, { mailer, now }); // e-ticket, or cancelled + refund note
+  }
   return { outcome };
 }
 
@@ -167,21 +172,23 @@ export async function refreshPayment(db, paymongo, { accessKey, now = new Date()
  * Ends an unpaid booking whose 15 minutes are over — but asks PayMongo first, so a payment
  * made in time (webhook not arrived yet) still confirms, and a late one is flagged for refund.
  */
-export async function expireReservation(db, paymongo, reservationId, now = new Date()) {
+export async function expireReservation(db, paymongo, reservationId, now = new Date(), { mailer } = {}) {
   const paySnap = await refs(db, reservationId).payment.get();
   const payment = paySnap.exists ? paySnap.data() : null;
 
   if (payment?.checkoutSessionId && payment.status !== 'verified') {
     if (!paymongo) throw new PaymentError('payments_unavailable'); // never drop a possible payment unchecked
     const session = await paymongo.getCheckoutSession(payment.checkoutSessionId);
-    if (paidPaymentOf(session)) return settlePayment(db, { reservationId, session, now });
+    if (paidPaymentOf(session)) return settlePayment(db, { reservationId, session, now, mailer });
     if (session.attributes?.status === 'active') {
       await paymongo.expireCheckoutSession(payment.checkoutSessionId).catch((e) =>
         console.error('Could not expire checkout session', payment.checkoutSessionId, e),
       );
     }
   }
-  return { outcome: (await cancelExpired(db, reservationId, now)) ? 'expired' : 'unchanged' };
+  if (!(await cancelExpired(db, reservationId, now))) return { outcome: 'unchanged' };
+  await sendStatusEmail(db, reservationId, { mailer, now });
+  return { outcome: 'expired' };
 }
 
 async function cancelExpired(db, reservationId, now) {

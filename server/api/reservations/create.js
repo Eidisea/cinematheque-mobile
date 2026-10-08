@@ -1,3 +1,4 @@
+import { sendStatusEmail } from '../../lib/email.js';
 import { getDb } from '../../lib/firebase.js';
 import { HttpError, endpoint } from '../../lib/http.js';
 import { expireReservation } from '../../lib/payments.js';
@@ -16,7 +17,10 @@ export default endpoint({ methods: ['POST'] }, async (body) => {
   try {
     const db = getDb();
     const paymongo = getPaymongo();
-    const created = await createReservation(db, value, { expire: (id) => expireReservation(db, paymongo, id) });
+    const { reservationId, ...created } = await createReservation(db, value, {
+      expire: (id) => expireReservation(db, paymongo, id),
+    });
+    await sendStatusEmail(db, reservationId); // "Reservation received" / "Complete your payment"
     return { status: 201, body: { ...created, expiresAt: created.expiresAt?.toISOString() ?? null } };
   } catch (e) {
     if (e instanceof SeatConflictError) throw new HttpError(409, 'seats_taken', { seats: e.labels });
