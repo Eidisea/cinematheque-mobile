@@ -41,6 +41,9 @@ abstract class StaffSession extends ChangeNotifier {
   Future<void> signIn({required String email, required String password});
 
   Future<void> signOut();
+
+  /// The signed-in user's Firebase ID token, sent to staff-only server routes.
+  Future<String?> idToken() async => null;
 }
 
 class FirebaseStaffSession extends StaffSession {
@@ -128,6 +131,9 @@ class FirebaseStaffSession extends StaffSession {
       throw StaffSignInException(_messageFor(e.code));
     }
   }
+
+  @override
+  Future<String?> idToken() async => _auth.currentUser?.getIdToken();
 
   @override
   Future<void> signOut() async {

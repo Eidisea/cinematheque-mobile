@@ -6,19 +6,22 @@ import 'auth/staff_session.dart';
 import 'staff_router.dart';
 import 'theme/staff_theme.dart';
 import '../core/clock.dart';
-import 'data/dashboard_repository.dart';
+import 'data/staff_api.dart';
+import 'data/staff_repository.dart';
+import '../core/app_config.dart';
 import 'staff_services.dart';
 
 /// Staff app (Flutter Web). Staff sign in with Firebase Authentication and must have an
 /// active staff record; every page except /login is protected by the router.
 class StaffApp extends StatefulWidget {
-  const StaffApp({super.key, required this.startup, this.session, this.dashboard, this.clock = const Clock()});
+  const StaffApp({super.key, required this.startup, this.session, this.data, this.api, this.clock = const Clock()});
 
   final FirebaseStartup startup;
 
   /// Tests pass fakes; the real app signs in with Firebase and reads Firestore.
   final StaffSession? session;
-  final DashboardRepository? dashboard;
+  final StaffRepository? data;
+  final StaffApi? api;
   final Clock clock;
 
   @override
@@ -28,7 +31,8 @@ class StaffApp extends StatefulWidget {
 class _StaffAppState extends State<StaffApp> {
   StaffSession? _session;
   GoRouter? _router;
-  DashboardRepository? _dashboard;
+  StaffRepository? _data;
+  StaffApi? _api;
 
   @override
   void initState() {
@@ -36,7 +40,9 @@ class _StaffAppState extends State<StaffApp> {
     if (widget.startup.isReady || widget.session != null) {
       _session = widget.session ?? FirebaseStaffSession();
       _router = buildStaffRouter(_session!);
-      _dashboard = widget.dashboard ?? FirestoreDashboardRepository();
+      _data = widget.data ?? FirestoreStaffRepository();
+      final session = _session!;
+      _api = widget.api ?? (AppConfig.hasApi ? HttpStaffApi(AppConfig.apiBaseUrl, idToken: session.idToken) : null);
     }
   }
 
@@ -60,7 +66,8 @@ class _StaffAppState extends State<StaffApp> {
     }
 
     return StaffServices(
-      dashboard: _dashboard!,
+      data: _data!,
+      api: _api,
       clock: widget.clock,
       child: MaterialApp.router(
         title: 'CCD Staff',

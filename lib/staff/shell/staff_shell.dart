@@ -88,7 +88,7 @@ class _Sidebar extends StatelessWidget {
                   // Free reservations waiting for approval, as on the website.
                   count: item.path == '/reservations'
                       ? StreamBuilder(
-                          stream: services.dashboard.watchPendingReservations(),
+                          stream: services.data.watchPendingReservations(),
                           builder: (context, snap) {
                             final now = services.clock.now();
                             final n = (snap.data ?? const [])

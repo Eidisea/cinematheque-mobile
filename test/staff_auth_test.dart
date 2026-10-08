@@ -6,7 +6,7 @@ import 'package:ccd_mobile/staff/staff_router.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'fake_dashboard.dart';
+import 'fake_staff_repository.dart';
 
 /// A session we control directly — no Firebase involved.
 class FakeStaffSession extends StaffSession {
@@ -91,7 +91,7 @@ void main() {
       tester.view.devicePixelRatio = 1;
       addTearDown(tester.view.reset);
       final session = FakeStaffSession();
-      await tester.pumpWidget(StaffApp(startup: ready, session: session, dashboard: FakeDashboardRepository()));
+      await tester.pumpWidget(StaffApp(startup: ready, session: session, data: FakeStaffRepository()));
       await tester.pumpAndSettle();
       return session;
     }
@@ -142,7 +142,7 @@ void main() {
 
       await tester.tap(find.text('Reservations'));
       await tester.pumpAndSettle();
-      expect(find.text('Find bookings, check payment status, approve or cancel'), findsOneWidget);
+      expect(find.text('No reservations'), findsOneWidget, reason: 'the Reservations page, empty');
 
       await tester.tap(find.byTooltip('Account'));
       await tester.pumpAndSettle();
@@ -175,7 +175,7 @@ void main() {
       expect(find.text('OPERATIONS'), findsOneWidget);
       await tester.tap(find.descendant(of: find.byType(Drawer), matching: find.text('Attendance')));
       await tester.pumpAndSettle();
-      expect(find.text('Screenings, how each one is booked, and admitting moviegoers at the door'), findsOneWidget);
+      expect(find.text('No upcoming screenings'), findsOneWidget, reason: 'the Attendance page, empty');
     });
   });
 }

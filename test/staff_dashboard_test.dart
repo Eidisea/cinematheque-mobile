@@ -8,7 +8,7 @@ import 'package:ccd_mobile/staff/staff_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'fake_dashboard.dart';
+import 'fake_staff_repository.dart';
 import 'staff_auth_test.dart' show FakeStaffSession;
 
 final now = DateTime.utc(2026, 10, 8, 2); // Thursday 10:00 AM Manila
@@ -83,7 +83,7 @@ void main() {
       startup: const FirebaseStartup.ready(),
       session: session,
       clock: FixedClock(now),
-      dashboard: FakeDashboardRepository(
+      data: FakeStaffRepository(
         screenings: [today, malvarosa, accident, later],
         reservations: [toApprove, awaiting, paidOk, late],
         payments: [payment(paidOk), payment(late, refund: true), payment(awaiting, verified: false)],
@@ -127,7 +127,7 @@ void main() {
 
     await tester.tap(find.widgetWithText(FilledButton, 'Review'));
     await tester.pumpAndSettle();
-    expect(find.text('Find bookings, check payment status, approve or cancel'), findsOneWidget);
+    expect(find.text('Booking ${toApprove.bookingReference}', findRichText: true), findsOneWidget, reason: 'the booking page');
   });
 
   testWidgets('empty: quiet messages, no made-up numbers', (tester) async {
@@ -139,7 +139,7 @@ void main() {
       startup: const FirebaseStartup.ready(),
       session: session,
       clock: FixedClock(now),
-      dashboard: FakeDashboardRepository(),
+      data: FakeStaffRepository(),
     ));
     await tester.pumpAndSettle();
     expect(find.textContaining('0 upcoming screenings'), findsOneWidget);

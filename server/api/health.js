@@ -1,9 +1,10 @@
+import { getCloudinary } from '../lib/cloudinary.js';
 import { getMailer } from '../lib/email.js';
 import { getDb } from '../lib/firebase.js';
 import { endpoint } from '../lib/http.js';
 
-// GET /api/health — is the API up, can it reach Firestore, and can it sign in to Gmail?
-// Answers only true/false (email: null when Gmail is not configured): no configuration,
+// GET /api/health — is the API up, can it reach Firestore, can it sign in to Gmail and
+// Cloudinary? Answers only true/false (null when a service is not configured): no configuration,
 // addresses or error details. "ok" depends on Firestore only — email problems never stop
 // bookings.
 export default endpoint({ methods: ['GET'] }, async () => {
@@ -26,5 +27,14 @@ export default endpoint({ methods: ['GET'] }, async () => {
       email = false;
     }
   }
-  return { status: firestore ? 200 : 503, body: { ok: firestore, firestore, email } };
+
+  let posters = null;
+  const cloudinary = getCloudinary();
+  if (cloudinary) {
+    posters = await cloudinary.ping().catch((e) => {
+      console.error('Health check: Cloudinary unreachable', e.message);
+      return false;
+    });
+  }
+  return { status: firestore ? 200 : 503, body: { ok: firestore, firestore, email, posters } };
 });

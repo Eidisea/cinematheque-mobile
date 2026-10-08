@@ -3,11 +3,20 @@ import 'package:go_router/go_router.dart';
 
 import 'auth/staff_session.dart';
 import 'navigation.dart';
+import 'screens/attendance_screen.dart';
 import 'screens/dashboard_screen.dart';
+import 'screens/film_form_screen.dart';
+import 'screens/films_screen.dart';
 import 'screens/loading_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/not_found_screen.dart';
 import 'screens/placeholder_screen.dart';
+import 'screens/reservation_screen.dart';
+import 'screens/reservations_screen.dart';
+import 'screens/screening_form_screen.dart';
+import 'screens/screening_screen.dart';
+import 'screens/staff_account_form_screen.dart';
+import 'screens/staff_accounts_screen.dart';
 import 'shell/staff_shell.dart';
 
 const loginPath = '/login';
@@ -57,23 +66,90 @@ GoRouter buildStaffRouter(StaffSession session) {
     errorBuilder: (context, state) => const NotFoundScreen(),
     routes: [
       GoRoute(path: loadingPath, builder: (context, state) => const LoadingScreen()),
-      GoRoute(path: loginPath, builder: (context, state) => LoginScreen(session: session)),
+      GoRoute(
+        path: loginPath,
+        builder: (context, state) => LoginScreen(session: session),
+      ),
       ShellRoute(
-        builder: (context, state, child) => StaffShell(
-          session: session,
-          location: state.uri.path,
-          child: child,
-        ),
+        builder: (context, state, child) => StaffShell(session: session, location: state.uri.path, child: child),
         routes: [
           for (final item in allStaffNavItems)
             GoRoute(
               path: item.path,
               pageBuilder: (context, state) => NoTransitionPage(
                 key: ValueKey(item.path),
-                child: item.path == '/'
-                    ? DashboardScreen(session: session)
-                    : PlaceholderScreen(item: item),
+                child: switch (item.path) {
+                  '/' => DashboardScreen(session: session),
+                  '/reservations' => ReservationsScreen(initialScreeningId: state.uri.queryParameters['screening']),
+                  '/attendance' => const AttendanceScreen(),
+                  '/settings/films' => const FilmsScreen(),
+                  '/settings/staff' => StaffAccountsScreen(myUid: session.staff?.uid),
+                  _ => PlaceholderScreen(item: item),
+                },
               ),
+              routes: [
+                if (item.path == '/attendance') ...[
+                  GoRoute(
+                    path: 'new',
+                    pageBuilder: (context, state) => NoTransitionPage(
+                      key: const ValueKey('screening-new'),
+                      child: ScreeningFormScreen(staffUid: session.staff?.uid, initialMovieId: state.uri.queryParameters['movie']),
+                    ),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    pageBuilder: (context, state) => NoTransitionPage(
+                      key: ValueKey('screening-${state.pathParameters['id']}'),
+                      child: ScreeningScreen(screeningId: state.pathParameters['id']!),
+                    ),
+                    routes: [
+                      GoRoute(
+                        path: 'edit',
+                        pageBuilder: (context, state) => NoTransitionPage(
+                          key: ValueKey('screening-edit-${state.pathParameters['id']}'),
+                          child: ScreeningFormScreen(screeningId: state.pathParameters['id']!, staffUid: session.staff?.uid),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (item.path == '/settings/films') ...[
+                  GoRoute(
+                    path: 'new',
+                    pageBuilder: (context, state) =>
+                        const NoTransitionPage(key: ValueKey('film-new'), child: FilmFormScreen()),
+                  ),
+                  GoRoute(
+                    path: ':id',
+                    pageBuilder: (context, state) => NoTransitionPage(
+                      key: ValueKey('film-${state.pathParameters['id']}'),
+                      child: FilmFormScreen(movieId: state.pathParameters['id']!),
+                    ),
+                  ),
+                ],
+                if (item.path == '/settings/staff') ...[
+                  GoRoute(
+                    path: 'new',
+                    pageBuilder: (context, state) =>
+                        const NoTransitionPage(key: ValueKey('staff-new'), child: StaffAccountFormScreen()),
+                  ),
+                  GoRoute(
+                    path: ':uid',
+                    pageBuilder: (context, state) => NoTransitionPage(
+                      key: ValueKey('staff-${state.pathParameters['uid']}'),
+                      child: StaffAccountFormScreen(uid: state.pathParameters['uid']!),
+                    ),
+                  ),
+                ],
+                if (item.path == '/reservations')
+                  GoRoute(
+                    path: ':id',
+                    pageBuilder: (context, state) => NoTransitionPage(
+                      key: ValueKey('reservation-${state.pathParameters['id']}'),
+                      child: ReservationScreen(reservationId: state.pathParameters['id']!),
+                    ),
+                  ),
+              ],
             ),
         ],
       ),

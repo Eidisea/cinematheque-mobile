@@ -13,7 +13,7 @@ import { newAccessKey, newBookingReference, normalizeBookingReference } from './
 import { claimSeats, releaseSeats } from './seat-holds.js';
 
 export class ReservationError extends Error {
-  /** @param {'not_found'|'not_cancellable'} code */
+  /** @param {'not_found'|'not_cancellable'|'not_approvable'} code */
   constructor(code, detail = '') {
     super(`${code}${detail ? `: ${detail}` : ''}`);
     this.name = 'ReservationError';
@@ -165,7 +165,7 @@ export async function findReservationIdByAccessKey(db, accessKey) {
  *  - staff:    pending or confirmed (Phase 9)
  *  - expiry:   only pending paid bookings whose payment deadline has passed
  */
-export async function cancelReservation(db, { reservationId, reason, now = new Date() }) {
+export async function cancelReservation(db, { reservationId, reason, now = new Date(), by = null }) {
   const reservationRef = db.collection('reservations').doc(reservationId);
   const first = await reservationRef.get();
   if (!first.exists) throw new ReservationError('not_found');
@@ -197,6 +197,7 @@ export async function cancelReservation(db, { reservationId, reason, now = new D
         status: 'cancelled',
         cancellationReason: finalReason,
         cancelledAt: Timestamp.fromDate(now),
+        ...(by ? { cancelledBy: by } : {}), // the staff member, for staff cancellations
       };
       tx.update(reservationRef, update);
       tx.set(db.collection('bookingViews').doc(r.accessKey), bookingViewOf({ ...r, ...update }, payment));

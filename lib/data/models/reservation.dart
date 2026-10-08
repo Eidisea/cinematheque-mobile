@@ -147,6 +147,7 @@ class Reservation {
     this.expiresAt,
     this.confirmedAt,
     this.cancelledAt,
+    this.emails = const {},
   });
 
   final String id;
@@ -162,6 +163,10 @@ class Reservation {
   final DateTime? expiresAt; // paid + pending only: end of the 15-minute payment window
   final DateTime? confirmedAt;
   final DateTime? cancelledAt;
+
+  /// The email sent for each status ("pending" / "confirmed" / "cancelled") and how it went:
+  /// "sending", "sent" or "failed" (server-written; see server/lib/email.js).
+  final Map<String, String> emails;
 
   List<String> get seatLabels => seats.map((s) => s.label).toList(growable: false);
 
@@ -188,6 +193,10 @@ class Reservation {
       expiresAt: dateOrNull(d['expiresAt']),
       confirmedAt: dateOrNull(d['confirmedAt']),
       cancelledAt: dateOrNull(d['cancelledAt']),
+      emails: {
+        for (final e in mapOrEmpty(d['emails']).entries)
+          if (e.value is Map && (e.value as Map)['state'] is String) e.key: (e.value as Map)['state'] as String,
+      },
     );
   }
 

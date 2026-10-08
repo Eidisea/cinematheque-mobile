@@ -52,6 +52,22 @@ class Movie {
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
+  /// The same film under another document ID (e.g. once created).
+  Movie withId(String newId) => Movie(
+        id: newId,
+        title: title,
+        synopsis: synopsis,
+        runtimeMinutes: runtimeMinutes,
+        rating: rating,
+        releaseYear: releaseYear,
+        genres: genres,
+        directors: directors,
+        cast: cast,
+        poster: poster,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+
   factory Movie.fromFirestore(DocumentSnapshot<Map<String, dynamic>> doc, [SnapshotOptions? _]) =>
       Movie.fromMap(doc.id, doc.data() ?? const {});
 

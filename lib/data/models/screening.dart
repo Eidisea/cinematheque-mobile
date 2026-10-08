@@ -160,6 +160,24 @@ class Screening {
         'createdAt': FieldValue.serverTimestamp(),
       };
 
+  /// The same screening under another document ID (e.g. once created).
+  Screening withId(String newId) => Screening(
+        id: newId,
+        eventTitle: eventTitle,
+        movieId: movieId,
+        movie: movie,
+        startAt: startAt,
+        endAt: endAt,
+        type: type,
+        priceCentavos: priceCentavos,
+        capacity: capacity,
+        seatHolds: seatHolds,
+        hasReservations: hasReservations,
+        createdBy: createdBy,
+        createdAt: createdAt,
+        updatedAt: updatedAt,
+      );
+
   /// Fields for UPDATING a screening (staff) with `update()`, never `set()`,
   /// so seat holds written by the server are not overwritten.
   Map<String, Object?> toStaffUpdate() => _eventFields();

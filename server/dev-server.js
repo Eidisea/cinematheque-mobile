@@ -10,6 +10,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+process.env.FIREBASE_AUTH_EMULATOR_HOST ??= '127.0.0.1:9099'; // staff sign-in tokens from the Auth emulator
 process.env.GCLOUD_PROJECT ??= 'cinematheque-48a54';
 process.env.ALLOWED_ORIGINS ??= 'http://127.0.0.1:5056,http://localhost:5056';
 
