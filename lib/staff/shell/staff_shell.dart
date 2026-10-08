@@ -290,7 +290,7 @@ class _TopBar extends StatelessWidget {
                   style: IconButton.styleFrom(
                     foregroundColor: StaffColors.gray700,
                     side: const BorderSide(color: StaffColors.borderStrong),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                   ),
                   icon: const Icon(Icons.menu, size: 20),
                   onPressed: () => Scaffold.of(context).openDrawer(),

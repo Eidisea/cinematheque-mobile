@@ -18,7 +18,7 @@ class FormPanel extends StatelessWidget {
       decoration: BoxDecoration(
         color: StaffColors.surface,
         border: Border.all(color: StaffColors.border),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -75,7 +75,8 @@ class LabeledField extends StatelessWidget {
   }
 }
 
-/// Two side-by-side choices (Film / Special programme, Free / Paid), as on the website.
+/// Two side-by-side boxes (Film / Special programme, Free / Paid), as on the website: equal
+/// widths, the chosen one outlined in purple.
 class ChoiceToggle<T> extends StatelessWidget {
   const ChoiceToggle({super.key, required this.values, required this.current, required this.label, required this.onSelect, this.enabled = true});
 
@@ -87,39 +88,51 @@ class ChoiceToggle<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final v in values)
-          Semantics(
-            button: true,
-            selected: v == current,
-            child: InkWell(
-              onTap: enabled ? () => onSelect(v) : null,
-              borderRadius: BorderRadius.circular(8),
-              child: Container(
-                height: 38,
-                padding: const EdgeInsets.symmetric(horizontal: 14),
-                decoration: BoxDecoration(
-                  color: v == current ? StaffColors.brandTint : StaffColors.surface,
-                  border: Border.all(color: v == current ? StaffColors.brand : StaffColors.borderStrong, width: v == current ? 1.5 : 1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(v == current ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                        size: 16, color: v == current ? StaffColors.brand : StaffColors.gray400),
-                    const SizedBox(width: 8),
-                    Text(label(v),
-                        style: TextStyle(fontSize: 14, color: enabled ? StaffColors.text : StaffColors.textMuted, fontWeight: FontWeight.w500)),
-                  ],
-                ),
-              ),
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 520),
+      child: Row(
+        children: [
+          for (var i = 0; i < values.length; i++) ...[
+            if (i > 0) const SizedBox(width: 8),
+            Expanded(
+              child: Builder(builder: (context) {
+                final v = values[i];
+                final on = v == current;
+                return Semantics(
+                  button: true,
+                  selected: on,
+                  child: Material(
+                    color: StaffColors.surface,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(6),
+                      side: BorderSide(color: on ? StaffColors.brand : StaffColors.borderStrong),
+                    ),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(6),
+                      onTap: enabled ? () => onSelect(v) : null,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                        child: Row(
+                          children: [
+                            Icon(on ? Icons.radio_button_checked : Icons.radio_button_unchecked,
+                                size: 16, color: on ? StaffColors.brand : StaffColors.gray400),
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(label(v),
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 14, color: enabled ? StaffColors.text : StaffColors.textMuted)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }),
             ),
-          ),
-      ],
+          ],
+        ],
+      ),
     );
   }
 }
@@ -146,8 +159,8 @@ class SelectBox<T> extends StatelessWidget {
         child: DropdownButton<T>(
           value: items.containsKey(value) ? value : null,
           isExpanded: true,
-          hint: Text(hint, style: const TextStyle(fontSize: 14, color: StaffColors.textMuted)),
-          style: const TextStyle(fontSize: 14, color: StaffColors.text),
+          hint: Text(hint, style: const TextStyle(fontFamily: 'Geist', fontSize: 14, color: StaffColors.textMuted)),
+          style: const TextStyle(fontFamily: 'Geist', fontSize: 14, color: StaffColors.text),
           items: [for (final e in items.entries) DropdownMenuItem<T>(value: e.key, child: Text(e.value, overflow: TextOverflow.ellipsis))],
           onChanged: onChanged,
         ),

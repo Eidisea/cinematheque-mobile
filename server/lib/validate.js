@@ -5,7 +5,6 @@
 import { MAX_SEATS_PER_RESERVATION, SEAT_LABEL_PATTERN } from './booking-rules.js';
 
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/;
-const PHONE = /^[0-9+()\-\s]{7,20}$/;
 
 function text(errors, field, value, { required = false, max, pattern, message } = {}) {
   const v = typeof value === 'string' ? value.trim() : value == null ? '' : null;
@@ -28,6 +27,24 @@ function text(errors, field, value, { required = false, max, pattern, message } 
   return v;
 }
 
+/**
+ * Philippine mobile number → "+639XXXXXXXXX". The app sends "+63" and the 10 digits after it;
+ * 09XXXXXXXXX, 639…, spaces and dashes are accepted too.
+ */
+function mobile(errors, field, value) {
+  const raw = typeof value === 'string' ? value.replace(/[\s\-().]/g, '') : '';
+  if (!raw) {
+    errors[field] = 'This field is required.';
+    return null;
+  }
+  const m = /^(?:\+?63|0)?(9\d{9})$/.exec(raw);
+  if (!m) {
+    errors[field] = 'Enter a mobile number: +63 and 10 digits starting with 9.';
+    return null;
+  }
+  return `+63${m[1]}`;
+}
+
 function person(errors, prefix, p, { bookerFields }) {
   const o = p && typeof p === 'object' ? p : {};
   const out = {
@@ -36,9 +53,7 @@ function person(errors, prefix, p, { bookerFields }) {
     lastName: text(errors, `${prefix}.lastName`, o.lastName, { required: true, max: 50 }),
   };
   if (bookerFields) {
-    out.contactNo = text(errors, `${prefix}.contactNo`, o.contactNo, {
-      required: true, max: 20, pattern: PHONE, message: 'Enter a valid contact number.',
-    });
+    out.contactNo = mobile(errors, `${prefix}.contactNo`, o.contactNo);
     out.email = text(errors, `${prefix}.email`, o.email, {
       required: true, max: 100, pattern: EMAIL, message: 'Enter a valid email address.',
     });
@@ -62,9 +77,7 @@ function person(errors, prefix, p, { bookerFields }) {
     age,
     sex,
     companySchool: text(errors, `${prefix}.companySchool`, o.companySchool, { required: true, max: 150 }),
-    contactNo: text(errors, `${prefix}.contactNo`, o.contactNo, {
-      required: true, max: 20, pattern: PHONE, message: 'Enter a valid contact number.',
-    }),
+    contactNo: mobile(errors, `${prefix}.contactNo`, o.contactNo),
     email: text(errors, `${prefix}.email`, o.email, {
       required: true, max: 100, pattern: EMAIL, message: 'Enter a valid email address.',
     }),

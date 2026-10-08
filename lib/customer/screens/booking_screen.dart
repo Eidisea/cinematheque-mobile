@@ -95,45 +95,9 @@ class _BookingScreenState extends State<BookingScreen> with WidgetsBindingObserv
   }
 
   Future<void> _cancel(BookingView booking) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Cancel this booking?'),
-        content: Text(
-          'Seats ${booking.seats.map((s) => s.label).join(', ')} will be released for other moviegoers. '
-          'This cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            style: TextButton.styleFrom(foregroundColor: CustomerColors.ink),
-            child: const Text('Keep booking'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: TextButton.styleFrom(foregroundColor: CustomerColors.danger),
-            child: const Text('Cancel booking'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true || !mounted) return;
-
-    final api = CustomerServices.of(context).bookingApi;
-    if (api == null) return _toast('Cancelling is not available right now.');
-    setState(() => _cancelling = true);
-    try {
-      await api.cancel(widget.accessKey);
-      _toast('Booking cancelled. The seats were released.');
-    } on ApiException catch (e) {
-      _toast(switch (e.code) {
-        'not_cancellable' => 'This booking can no longer be cancelled here. Please contact Cinematheque.',
-        'network' => 'No connection. Please try again.',
-        _ => 'Could not cancel. Please try again.',
-      });
-    } finally {
-      if (mounted) setState(() => _cancelling = false);
-    }
+    await confirmAndCancelBooking(context, booking, widget.accessKey, onBusy: (busy) {
+      if (mounted) setState(() => _cancelling = busy);
+    });
   }
 
   void _toast(String message) {
@@ -192,7 +156,7 @@ class _BookingScreenState extends State<BookingScreen> with WidgetsBindingObserv
                         opacity: a,
                         child: SizeTransition(sizeFactor: a, alignment: Alignment.topCenter, child: child),
                       ),
-                      child: _Ticket(key: ValueKey(booking.status), booking: booking),
+                      child: BookingTicket(key: ValueKey(booking.status), booking: booking),
                     ),
                     if (_awaitsPayment(booking) && !expired) ...[
                       const SizedBox(height: Space.xl),
@@ -317,8 +281,8 @@ class _StatusPanel extends StatelessWidget {
 /// Confirmed = the e-ticket (ADMIT n). Pending / cancelled use the same shape, labelled.
 /// (The official FDCP paper ticket and its control number stay outside this system —
 /// the booking reference is what staff use at the door.)
-class _Ticket extends StatelessWidget {
-  const _Ticket({super.key, required this.booking});
+class BookingTicket extends StatelessWidget {
+  const BookingTicket({super.key, required this.booking});
 
   final BookingView booking;
 
@@ -485,5 +449,67 @@ class _Reference extends StatelessWidget {
         ),
       ],
     );
+  }
+}
+
+/// Asks "Cancel this booking?" and, if confirmed, asks the server to cancel it (pending
+/// bookings only). Tells the customer how it went. → true when it was cancelled.
+/// [onBusy] is told when the server request starts and ends (after the customer confirmed).
+Future<bool> confirmAndCancelBooking(
+  BuildContext context,
+  BookingView booking,
+  String accessKey, {
+  ValueChanged<bool>? onBusy,
+}) async {
+  void toast(String message) {
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  final confirmed = await showDialog<bool>(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Cancel this booking?'),
+      content: Text(
+        'Seats ${booking.seats.map((s) => s.label).join(', ')} will be released for other moviegoers. '
+        'This cannot be undone.',
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context, false),
+          style: TextButton.styleFrom(foregroundColor: CustomerColors.ink),
+          child: const Text('Keep booking'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context, true),
+          style: TextButton.styleFrom(foregroundColor: CustomerColors.danger),
+          child: const Text('Cancel booking'),
+        ),
+      ],
+    ),
+  );
+  if (confirmed != true || !context.mounted) return false;
+
+  final api = CustomerServices.of(context).bookingApi;
+  if (api == null) {
+    toast('Cancelling is not available right now.');
+    return false;
+  }
+  onBusy?.call(true);
+  try {
+    await api.cancel(accessKey);
+    toast('Booking cancelled. The seats were released.');
+    return true;
+  } on ApiException catch (e) {
+    toast(switch (e.code) {
+      'not_cancellable' => 'This booking can no longer be cancelled here. Please contact Cinematheque.',
+      'network' => 'No connection. Please try again.',
+      _ => 'Could not cancel. Please try again.',
+    });
+    return false;
+  } finally {
+    onBusy?.call(false);
   }
 }

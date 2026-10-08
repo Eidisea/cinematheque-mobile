@@ -137,7 +137,7 @@ class Notice extends StatelessWidget {
       decoration: BoxDecoration(
         color: bg,
         border: Border.all(color: border),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(8),
       ),
       child: Text.rich(
         TextSpan(
@@ -169,7 +169,7 @@ class Panel extends StatelessWidget {
       decoration: BoxDecoration(
         color: StaffColors.surface,
         border: Border.all(color: StaffColors.border),
-        borderRadius: BorderRadius.circular(6),
+        borderRadius: BorderRadius.circular(10),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -322,8 +322,8 @@ class AdminButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final height = small ? 28.0 : 36.0;
-    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(6));
-    final text = TextStyle(fontSize: small ? 13 : 14, fontWeight: FontWeight.w600);
+    final shape = RoundedRectangleBorder(borderRadius: BorderRadius.circular(8));
+    final text = TextStyle(fontFamily: 'Geist', fontSize: small ? 13 : 14, fontWeight: FontWeight.w600);
     final padding = EdgeInsets.symmetric(horizontal: small ? 10 : 14);
     final child = busy
         ? SizedBox.square(
@@ -371,7 +371,8 @@ class AdminButton extends StatelessWidget {
 
 enum AdminButtonKind { primary, secondary, danger }
 
-/// The website's segmented quick filters ("All 4 · To approve 1 · …"); the current one is dark.
+/// The website's quick filters: separate pill chips ("All 4", "To approve 1", …); the
+/// current one is filled dark.
 class FilterChips<T> extends StatelessWidget {
   const FilterChips({super.key, required this.values, required this.current, required this.label, required this.onSelect, this.count});
 
@@ -383,48 +384,44 @@ class FilterChips<T> extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: StaffColors.surface,
-        border: Border.all(color: StaffColors.borderStrong),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Wrap(
-        children: [
-          for (final v in values)
-            Semantics(
+    return Wrap(
+      spacing: 6,
+      runSpacing: 6,
+      children: [
+        for (final v in values)
+          Builder(builder: (context) {
+            final on = v == current;
+            final fg = on ? Colors.white : StaffColors.gray700;
+            return Semantics(
               button: true,
-              selected: v == current,
-              child: InkWell(
-                onTap: () => onSelect(v),
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: v == current ? const Color(0xFF1F2937) : null,
-                    border: v == values.last ? null : const Border(right: BorderSide(color: StaffColors.border)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(label(v),
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: v == current ? Colors.white : StaffColors.gray700)),
-                      if (count != null) ...[
-                        const SizedBox(width: 6),
-                        Text('${count!(v)}',
-                            style: TextStyle(
-                                fontSize: 12,
-                                color: (v == current ? Colors.white : StaffColors.gray700).withValues(alpha: 0.7),
-                                fontFeatures: const [FontFeature.tabularFigures()])),
+              selected: on,
+              child: Material(
+                color: on ? const Color(0xFF1F2937) : StaffColors.surface,
+                shape: StadiumBorder(side: BorderSide(color: on ? const Color(0xFF1F2937) : StaffColors.borderStrong)),
+                child: InkWell(
+                  customBorder: const StadiumBorder(),
+                  onTap: () => onSelect(v),
+                  child: Container(
+                    height: 32,
+                    padding: const EdgeInsets.symmetric(horizontal: 13),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(label(v), style: TextStyle(fontSize: 13, fontWeight: FontWeight.w500, color: fg)),
+                        if (count != null) ...[
+                          const SizedBox(width: 6),
+                          Text('${count!(v)}',
+                              style: TextStyle(
+                                  fontSize: 12, color: fg.withValues(alpha: 0.7), fontFeatures: const [FontFeature.tabularFigures()])),
+                        ],
                       ],
-                    ],
+                    ),
                   ),
                 ),
               ),
-            ),
-        ],
-      ),
+            );
+          }),
+      ],
     );
   }
 }

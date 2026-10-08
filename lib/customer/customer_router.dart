@@ -8,6 +8,7 @@ import 'screens/reservation_details_screen.dart';
 import 'screens/screening_details_screen.dart';
 import 'screens/screenings_screen.dart';
 import 'screens/seat_selection_screen.dart';
+import 'screens/ticket_screen.dart';
 import 'shell/customer_shell.dart';
 
 /// Customer app pages. The three tabs (Find my booking · Screenings · About) live in the
@@ -50,6 +51,10 @@ GoRouter buildCustomerRouter() {
       GoRoute(
         path: '/booking/:key',
         builder: (context, state) => BookingScreen(accessKey: state.pathParameters['key']!),
+      ),
+      GoRoute(
+        path: '/ticket/:key',
+        builder: (context, state) => TicketScreen(accessKey: state.pathParameters['key']!),
       ),
       GoRoute(
         path: '/movies/:id',

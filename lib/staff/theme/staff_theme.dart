@@ -43,8 +43,8 @@ abstract final class StaffColors {
   static const dangerBorder = Color(0xFFFECACA);
 }
 
-/// Booking references and seat labels, as the website sets them (Geist Mono there).
-const staffMono = TextStyle(fontFamily: 'monospace', fontFamilyFallback: ['Consolas', 'Courier New']);
+/// Booking references and seat labels, in Geist Mono as on the website.
+const staffMono = TextStyle(fontFamily: 'GeistMono', fontWeight: FontWeight.w500, fontFamilyFallback: ['Consolas', 'monospace']);
 
 ThemeData buildStaffTheme() {
   final scheme = ColorScheme.fromSeed(
@@ -57,11 +57,12 @@ ThemeData buildStaffTheme() {
   const radius = BorderRadius.all(Radius.circular(8));
 
   return ThemeData(
+    fontFamily: 'Geist', // the website admin's typeface
     colorScheme: scheme,
     scaffoldBackgroundColor: StaffColors.canvas,
     dividerColor: StaffColors.border,
     dividerTheme: const DividerThemeData(color: StaffColors.border, thickness: 1, space: 1),
-    textTheme: Typography.blackMountainView.apply(bodyColor: StaffColors.text, displayColor: StaffColors.text),
+    textTheme: Typography.blackMountainView.apply(fontFamily: 'Geist', bodyColor: StaffColors.text, displayColor: StaffColors.text),
     cardTheme: const CardThemeData(
       color: StaffColors.surface,
       elevation: 0,
@@ -83,7 +84,7 @@ ThemeData buildStaffTheme() {
         foregroundColor: Colors.white,
         minimumSize: const Size(0, 40),
         shape: const RoundedRectangleBorder(borderRadius: radius),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+        textStyle: const TextStyle(fontFamily: 'Geist', fontWeight: FontWeight.w600, fontSize: 14),
       ),
     ),
     textButtonTheme: TextButtonThemeData(

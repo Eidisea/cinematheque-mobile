@@ -386,7 +386,7 @@ class _Attendee extends StatelessWidget {
             decoration: BoxDecoration(
               color: StaffColors.surfaceAlt,
               border: Border.all(color: StaffColors.borderStrong),
-              borderRadius: BorderRadius.circular(2),
+              borderRadius: BorderRadius.circular(5),
             ),
             child: Text(
               seat.label,

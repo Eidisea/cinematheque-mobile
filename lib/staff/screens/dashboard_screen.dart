@@ -39,6 +39,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<Reservation>? _recent;
   List<Payment>? _paidThisWeek;
   List<Payment> _refunds = const [];
+  bool _hasSeatLayout = true;
+  bool _creatingLayout = false;
   List<Reservation> _refundRows = const [];
   Map<String, int> _admitted = const {};
   Object? _error;
@@ -65,6 +67,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _watchAdmitted();
       }, onError: onError),
       repo.watchPendingReservations().listen((v) => setState(() => _pending = v), onError: onError),
+      repo.watchHasSeatLayout().listen((v) => setState(() => _hasSeatLayout = v), onError: onError),
       repo.watchRecentReservations().listen((v) => setState(() => _recent = v), onError: onError),
       repo
           .watchPaymentsPaidSince(now.subtract(const Duration(days: 7)))
@@ -92,6 +95,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _todayIds = ids;
     _admittedSub?.cancel();
     _admittedSub = StaffServices.of(context).data.watchAdmittedCounts(ids).listen((v) => setState(() => _admitted = v));
+  }
+
+  /// One-time setup: the hall's seats (the website fixes them at 120: rows A–J × 12).
+  Future<void> _createSeatLayout() async {
+    final uid = widget.session.staff?.uid;
+    if (uid == null) return;
+    setState(() => _creatingLayout = true);
+    try {
+      await StaffServices.of(context).data.createSeatLayout(staffUid: uid);
+      if (mounted) showMessage(context, 'The 120-seat hall is set up. Bookings can now be made.');
+    } catch (_) {
+      if (mounted) showMessage(context, 'Could not set up the hall. Check your connection and try again.');
+    } finally {
+      if (mounted) setState(() => _creatingLayout = false);
+    }
   }
 
   @override
@@ -241,6 +259,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ],
               ),
               const SizedBox(height: 16),
+              if (!_hasSeatLayout) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: StaffColors.warningTint,
+                    border: Border.all(color: StaffColors.warningBorder),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(children: [
+                    const Expanded(
+                      child: Text.rich(TextSpan(style: TextStyle(color: StaffColors.warning), children: [
+                        TextSpan(text: 'The hall is not set up yet. ', style: TextStyle(fontWeight: FontWeight.w600)),
+                        TextSpan(text: 'Customers cannot choose seats until it is: 120 seats, rows A–J of 12.'),
+                      ])),
+                    ),
+                    const SizedBox(width: 12),
+                    AdminButton(label: 'Set up the hall', busy: _creatingLayout, onPressed: _createSeatLayout),
+                  ]),
+                ),
+                const SizedBox(height: 16),
+              ],
               if (_error != null)
                 const Notice('Could not load the dashboard. Check your connection and reload the page.')
               else if (loading)

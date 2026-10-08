@@ -16,6 +16,7 @@ import 'package:ccd_mobile/data/models/seat_layout.dart';
 import 'package:ccd_mobile/data/repositories/booking_view_repository.dart';
 import 'package:ccd_mobile/data/repositories/catalog_repository.dart';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 final now = DateTime.utc(2026, 11, 20, 2); // 10:00 AM Manila
@@ -110,14 +111,19 @@ class FakeApi implements BookingApi {
     return const CreatedBooking(bookingReference: 'CCD-7KQ2M9XA', accessKey: 'key-1', requiresPayment: false, totalCentavos: 0);
   }
 
+  final emailedTo = <String>[];
+
   @override
-  Future<String> lookup({required String bookingReference, required String email}) async {
-    if (bookingReference.toUpperCase().trim() == 'CCD-7KQ2M9XA' && email.trim().toLowerCase() == 'juan@example.com') {
+  Future<String> lookup({required String bookingReference}) async {
+    if (bookingReference.toUpperCase().trim() == 'CCD-7KQ2M9XA') {
       views.push('key-1', view(status: ReservationStatus.confirmed));
       return 'key-1';
     }
     throw const ApiException('not_found', status: 404);
   }
+
+  @override
+  Future<void> emailBookings(String email) async => emailedTo.add(email);
 
   @override
   Future<void> cancel(String accessKey) async {
@@ -324,12 +330,34 @@ void main() {
         SavedBooking(bookingReference: 'CCD-7KQ2M9XA', accessKey: 'key-1', eventTitle: 'Film Night', startAt: start, savedAt: now),
       ]);
       h.views.push('key-1', v);
-      await tester.tap(find.byKey(const ValueKey('nav-0'))); // Find my booking tab
-      await tester.pumpAndSettle();
-      await tester.tap(find.text('FILM NIGHT'));
+      // The booking flow's last screen (where a new booking lands).
+      GoRouter.of(tester.element(find.byType(Scaffold).first)).push('/booking/key-1');
       await tester.pumpAndSettle();
       return h;
     }
+
+    testWidgets('from Find my booking: just the ticket, with Complete payment / Cancel only while pending', (tester) async {
+      final h = await pumpApp(tester, saved: [
+        SavedBooking(bookingReference: 'CCD-7KQ2M9XA', accessKey: 'key-1', eventTitle: 'Film Night', startAt: start, savedAt: now),
+      ]);
+      h.views.push('key-1', view(paid: true, expiresAt: now.add(const Duration(minutes: 10))));
+      await tester.tap(find.byKey(const ValueKey('nav-0')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('FILM NIGHT'));
+      await tester.pumpAndSettle();
+      expect(find.text('Your ticket'), findsOneWidget);
+      expect(find.text('PENDING'), findsOneWidget);
+      expect(find.text('Payment needed'), findsNothing, reason: 'no booking-flow status panel');
+      expect(find.widgetWithText(GoldButton, 'Complete payment'), findsOneWidget);
+
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel booking'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, 'Cancel booking').last);
+      await tester.pumpAndSettle();
+      expect(h.api.cancelCalls, 1);
+      expect(find.text('CANCELLED'), findsOneWidget);
+      expect(find.widgetWithText(GoldButton, 'Complete payment'), findsNothing);
+    });
 
     testWidgets('confirmed → e-ticket with ADMIT count, reference, seats and names', (tester) async {
       await openBooking(tester, view(status: ReservationStatus.confirmed, paid: true));
@@ -425,22 +453,27 @@ void main() {
   });
 
   group('Find my booking tab', () {
-    testWidgets('wrong details are refused; right ones are saved on this phone and opened', (tester) async {
+    testWidgets('a reference opens just the ticket (with a back button); it is saved on this phone', (tester) async {
       final h = await pumpApp(tester);
       await tester.tap(find.byKey(const ValueKey('nav-0'))); // Find my booking tab
       await tester.pumpAndSettle();
       expect(find.textContaining('Bookings you make or find on this phone appear here'), findsOneWidget);
 
-      await enter(tester, field('Booking reference'), 'ccd-7kq2m9xa');
-      await enter(tester, field('Email used for the booking'), 'wrong@example.com');
       await tapFindBooking(tester);
       await tester.pumpAndSettle();
-      expect(find.text('No booking matches that reference and email. Check both and try again.'), findsOneWidget);
+      expect(find.text('Enter your booking reference, or your email below'), findsOneWidget);
 
-      await enter(tester, field('Email used for the booking'), 'JUAN@example.com ');
+      await enter(tester, field('Booking reference'), 'ccd-aaaaaaaa');
       await tapFindBooking(tester);
       await tester.pumpAndSettle();
-      expect(find.text('Booking confirmed'), findsOneWidget);
+      expect(find.text('No booking matches that reference. Check it and try again.'), findsOneWidget);
+
+      await enter(tester, field('Booking reference'), 'ccd-7kq2m9xa');
+      await tapFindBooking(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Your ticket'), findsOneWidget, reason: 'the ticket page, not the booking flow');
+      expect(find.text('ADMIT 2'), findsOneWidget);
+      expect(find.text('Booking confirmed'), findsNothing, reason: 'no booking-flow status panel');
       expect(h.saved.bookings.single.accessKey, 'key-1');
 
       await tester.pageBack();
@@ -449,6 +482,22 @@ void main() {
       expect(find.text('ccd-7kq2m9xa'), findsNothing);
       expect(find.text('FILM NIGHT'), findsOneWidget);
       expect(find.text('CCD-7KQ2M9XA'), findsOneWidget);
+    });
+
+    testWidgets('an email alone: the references are emailed there (same answer whatever the email)', (tester) async {
+      final h = await pumpApp(tester);
+      await tester.tap(find.byKey(const ValueKey('nav-0')));
+      await tester.pumpAndSettle();
+      await enter(tester, field('Or the email used for the booking'), 'not-an-email');
+      await tapFindBooking(tester);
+      await tester.pumpAndSettle();
+      expect(find.text('Enter a valid email address'), findsOneWidget);
+
+      await enter(tester, field('Or the email used for the booking'), 'juan@example.com');
+      await tapFindBooking(tester);
+      await tester.pumpAndSettle();
+      expect(h.api.emailedTo, ['juan@example.com']);
+      expect(find.textContaining('we’ve emailed their booking references there'), findsOneWidget);
     });
 
     testWidgets('removing from the phone asks first and does not cancel', (tester) async {

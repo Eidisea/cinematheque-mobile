@@ -190,6 +190,8 @@ class _SeatMapBody extends StatelessWidget {
                 const _Notice(icon: Icons.event_busy_outlined, text: 'All seats have been reserved.'),
                 const SizedBox(height: Space.lg),
               ],
+              _ScreeningBanner(screening: map.screening),
+              const SizedBox(height: Space.lg),
               _Card(
                 padding: const EdgeInsets.fromLTRB(8, 18, 8, 16),
                 child: Column(
@@ -277,8 +279,7 @@ class _Notice extends StatelessWidget {
   }
 }
 
-/// "Your screening": the poster on a gold block, the seats picked, price and total, and
-/// Continue — the website's summary card.
+/// Under the seat map: the seats picked, price and total, and Continue.
 class _Summary extends StatelessWidget {
   const _Summary({required this.map});
 
@@ -313,45 +314,6 @@ class _Summary extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Container(
-            color: CustomerColors.stub,
-            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                PosterOnBlock(screening: screening, width: 104),
-                const SizedBox(width: 18),
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 10),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'YOUR SCREENING',
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 1.9,
-                            color: CustomerColors.goldText,
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(screening.eventTitle.toUpperCase(), style: CcdType.display(22, spacing: 0.4)),
-                        const SizedBox(height: 4),
-                        Text(
-                          '${formatDateShort(screening.startAt)} · ${formatTime(screening.startAt)}',
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
-                        ),
-                        const Text('Cinematheque Centre Davao', style: TextStyle(fontSize: 12, color: CustomerColors.muted)),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const Perforation(horizontal: true, inset: 0),
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 16, 20, 4),
             child: Column(
@@ -408,6 +370,63 @@ class _Summary extends StatelessWidget {
                   'Up to ${BookingRules.maxSeatsPerReservation} seats. The first seat you pick is yours.',
                   textAlign: TextAlign.center,
                   style: const TextStyle(fontSize: 12.5, color: CustomerColors.muted),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// "Your screening", above the seat map: the poster on a gold block, title, date and venue,
+/// on the cream ticket stub — the website's summary banner.
+class _ScreeningBanner extends StatelessWidget {
+  const _ScreeningBanner({required this.screening});
+
+  final Screening screening;
+
+  @override
+  Widget build(BuildContext context) {
+    return _Card(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Container(
+            color: CustomerColors.stub,
+            padding: const EdgeInsets.fromLTRB(20, 22, 20, 20),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                PosterOnBlock(screening: screening, width: 104),
+                const SizedBox(width: 18),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 10),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'YOUR SCREENING',
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.9,
+                            color: CustomerColors.goldText,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(screening.eventTitle.toUpperCase(), style: CcdType.display(22, spacing: 0.4)),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${formatDateShort(screening.startAt)} · ${formatTime(screening.startAt)}',
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                        const Text('Cinematheque Centre Davao', style: TextStyle(fontSize: 12, color: CustomerColors.muted)),
+                      ],
+                    ),
+                  ),
                 ),
               ],
             ),

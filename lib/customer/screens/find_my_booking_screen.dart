@@ -11,10 +11,10 @@ import '../widgets/motion.dart';
 import '../widgets/page_header.dart';
 import '../widgets/state_views.dart';
 
-/// "Find my booking" tab. Customers have no accounts, so a booking is opened with its
-/// reference AND the booker's email. Bookings made or found on this phone are listed
-/// underneath so they can be reopened without typing anything, followed by how booking
-/// works (people come here exactly when they wonder what happens next).
+/// "Find my booking" tab, as on the website: the booking reference opens the ticket, OR the
+/// booker's email gets a message with their upcoming references (so nobody can browse
+/// someone else's bookings by typing their email). Bookings made or found on this phone
+/// are listed underneath, then how booking works.
 class FindMyBookingScreen extends StatefulWidget {
   const FindMyBookingScreen({super.key});
 
@@ -28,6 +28,7 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
   final _email = TextEditingController();
   bool _busy = false;
   String? _error;
+  String? _emailedTo; // set after an email-only lookup
 
   @override
   void dispose() {
@@ -48,10 +49,20 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _emailedTo = null;
     });
     final router = GoRouter.of(context);
     try {
-      final key = await api.lookup(bookingReference: _reference.text, email: _email.text);
+      final reference = _reference.text.trim();
+      if (reference.isEmpty) {
+        final email = _email.text.trim();
+        await api.emailBookings(email);
+        if (!mounted) return;
+        setState(() => _emailedTo = email);
+        _email.clear();
+        return;
+      }
+      final key = await api.lookup(bookingReference: reference);
       final view = await services.bookingViews.get(key);
       if (view != null) {
         await services.savedBookings.save(
@@ -67,11 +78,12 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
       if (!mounted) return;
       _reference.clear();
       _email.clear();
-      router.push('/booking/$key');
+      router.push('/ticket/$key');
     } on ApiException catch (e) {
       setState(
         () => _error = switch (e.code) {
-          'not_found' => 'No booking matches that reference and email. Check both and try again.',
+          'not_found' => 'No booking matches that reference. Check it and try again.',
+          'validation' => 'Enter your booking reference or a valid email address.',
           'network' => 'No connection. Check your internet and try again.',
           _ => 'Something went wrong. Please try again.',
         },
@@ -101,8 +113,8 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
                   eyebrow: 'No account needed',
                   title: 'Find my booking',
                   lead:
-                      'Enter the booking reference from your email (it looks like CCD-7KQ2M9XA) '
-                      'and the email address used for the booking.',
+                      'Enter your booking reference (it looks like CCD-7KQ2M9XA), or the email address '
+                      'used for the booking to get your references by email.',
                 ),
               ),
               ContentWidth(
@@ -124,6 +136,21 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
                           ),
                           const SizedBox(height: 16),
                         ],
+                        if (_emailedTo != null) ...[
+                          Container(
+                            padding: const EdgeInsets.all(Space.md),
+                            decoration: BoxDecoration(
+                              color: CustomerColors.successTint,
+                              borderRadius: BorderRadius.circular(Radii.md),
+                            ),
+                            child: Text(
+                              'If $_emailedTo has upcoming bookings, we’ve emailed their booking references there. '
+                              'Check your inbox (and spam), then enter a reference above.',
+                              style: const TextStyle(color: CustomerColors.success, height: 1.45),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         // The lookup is a ticket: reference on the stub, email below the tear —
                         // "open your ticket", not "sign in".
                         _TicketLookup(
@@ -134,17 +161,25 @@ class _FindMyBookingScreenState extends State<FindMyBookingScreen> {
                             decoration: _ticketField('Booking reference', hint: 'CCD-XXXXXXXX'),
                             textCapitalization: TextCapitalization.characters,
                             textInputAction: TextInputAction.next,
-                            validator: (v) => (v ?? '').trim().length < 8 ? 'Enter your booking reference' : null,
+                            validator: (v) {
+                              final ref = (v ?? '').trim();
+                              if (ref.isEmpty && _email.text.trim().isEmpty) return 'Enter your booking reference, or your email below';
+                              return ref.isNotEmpty && ref.length < 8 ? 'Check the reference (CCD- and 8 characters)' : null;
+                            },
                           ),
                           bottom: TextFormField(
                             controller: _email,
                             enabled: !_busy,
-                            decoration: _ticketField('Email used for the booking'),
+                            decoration: _ticketField('Or the email used for the booking', hint: 'We’ll email you your references'),
                             keyboardType: TextInputType.emailAddress,
                             autofillHints: const [AutofillHints.email],
                             textInputAction: TextInputAction.done,
                             onFieldSubmitted: (_) => _find(),
-                            validator: (v) => (v ?? '').contains('@') ? null : 'Enter your email address',
+                            validator: (v) {
+                              final email = (v ?? '').trim();
+                              if (email.isEmpty || _reference.text.trim().isNotEmpty) return null;
+                              return RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$').hasMatch(email) ? null : 'Enter a valid email address';
+                            },
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -323,7 +358,7 @@ class _BookingTile extends StatelessWidget {
           side: past ? const BorderSide(color: CustomerColors.border) : BorderSide.none,
         ),
         child: InkWell(
-          onTap: () => context.push('/booking/${booking.accessKey}'),
+          onTap: () => context.push('/ticket/${booking.accessKey}'),
           child: IntrinsicHeight(
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.stretch,

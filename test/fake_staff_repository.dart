@@ -16,6 +16,7 @@ class FakeStaffRepository implements StaffRepository {
     this.admitted = const {},
     List<Movie> movies = const [],
     this.staff = const [],
+    this.hasSeatLayout = true,
   })  : screenings = [...screenings],
         movies = [...movies];
 
@@ -23,6 +24,7 @@ class FakeStaffRepository implements StaffRepository {
   final List<Screening> screenings;
   final List<Movie> movies;
   final List<StaffMember> staff;
+  bool hasSeatLayout;
   final refreshed = <String>[];
 
   /// Like Firestore, film and screening lists update live after a write.
@@ -124,6 +126,15 @@ class FakeStaffRepository implements StaffRepository {
 
   @override
   Stream<List<StaffMember>> watchStaff() => Stream.value(staff);
+
+  @override
+  Stream<bool> watchHasSeatLayout() => _live(() => hasSeatLayout);
+
+  @override
+  Future<void> createSeatLayout({required String staffUid}) async {
+    hasSeatLayout = true;
+    _changes.add(null);
+  }
 
   @override
   Stream<Map<String, int>> watchAdmittedCounts(List<String> screeningIds) =>

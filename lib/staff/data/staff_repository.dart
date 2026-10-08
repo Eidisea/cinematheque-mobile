@@ -4,6 +4,7 @@ import '../../data/models/movie.dart';
 import '../../data/models/payment.dart';
 import '../../data/models/reservation.dart';
 import '../../data/models/screening.dart';
+import '../../data/models/seat_layout.dart';
 import '../../data/models/staff_member.dart';
 import '../../data/repositories/catalog_repository.dart';
 import '../../data/repositories/firestore_collections.dart';
@@ -78,6 +79,12 @@ abstract class StaffRepository {
 
   /// Every staff account (active and inactive). Changed only through the server (StaffApi).
   Stream<List<StaffMember>> watchStaff();
+
+  /// Whether settings/seatLayout exists (bookings need it).
+  Stream<bool> watchHasSeatLayout();
+
+  /// Saves the standard hall: 10 rows (A–J) × 12 seats.
+  Future<void> createSeatLayout({required String staffUid});
 }
 
 class FirestoreStaffRepository implements StaffRepository {
@@ -184,6 +191,12 @@ class FirestoreStaffRepository implements StaffRepository {
   Stream<List<StaffMember>> watchStaff() => _c.staff.snapshots().map(
         (snap) => _values(snap)..sort((a, b) => '${a.lastName} ${a.firstName}'.compareTo('${b.lastName} ${b.firstName}')),
       );
+
+  @override
+  Stream<bool> watchHasSeatLayout() => _c.seatLayoutRaw.snapshots().map((d) => d.exists);
+
+  @override
+  Future<void> createSeatLayout({required String staffUid}) => _c.seatLayoutRaw.set(SeatLayout.grid().toFirestore(staffUid));
 
   @override
   Stream<Map<String, int>> watchAdmittedCounts(List<String> screeningIds) => screeningIds.isEmpty

@@ -6,7 +6,7 @@ import { beforeEach, describe, test } from 'node:test';
 
 import { Timestamp } from 'firebase-admin/firestore';
 
-import { formatPeso, renderEmail, sendStatusEmail } from '../lib/email.js';
+import { emailBookingList, formatPeso, renderBookingList, renderEmail, sendStatusEmail } from '../lib/email.js';
 import { getDb } from '../lib/firebase.js';
 import { settlePayment } from '../lib/payments.js';
 import { cancelReservation, createReservation } from '../lib/reservations.js';
@@ -76,14 +76,14 @@ function fakeMailer({ fail = false } = {}) {
   };
 }
 
-describe('email templates (the website\'s design)', () => {
+describe('email templates', () => {
   beforeEach(reset);
 
   test('free + pending: "awaiting approval", not a ticket; HTML-escaped; Manila time; seat 1 marked as booker', async () => {
     const r = await reservation(await book());
     const m = renderEmail('pending', r);
     assert.match(m.subject, /^Reservation received · CCD-[A-Z0-9]{8}$/);
-    assert.ok(m.html.includes('PENDING · AWAITING APPROVAL'));
+    assert.ok(m.html.includes('Awaiting approval'));
     assert.match(m.text, /not valid for entry/);
     assert.match(m.text, /Date: Saturday, November 21, 2026/);
     assert.match(m.text, /Time: 6:00 PM – 8:00 PM/);
@@ -92,14 +92,14 @@ describe('email templates (the website\'s design)', () => {
     assert.match(m.text, /A2 {2}Jose Dela Cruz$/m);
     assert.ok(m.html.includes('Film &lt;Night&gt; &amp; &quot;Talk&quot;'), 'names and titles are escaped in HTML');
     assert.ok(!m.html.includes('<Night>'));
-    assert.ok(!m.text.includes('0917'), 'no contact numbers in emails');
+    assert.ok(!m.text.includes('917'), 'no contact numbers in emails');
   });
 
   test('paid + pending: pay-by time (15 minutes), amount, and how to pay in the app', async () => {
     const r = await reservation(await book('paid1'));
     const m = renderEmail('pending', r, { status: 'pending', amountCentavos: 30000 });
     assert.match(m.subject, /^Complete your payment · CCD-/);
-    assert.ok(m.html.includes('PENDING · AWAITING PAYMENT'));
+    assert.ok(m.html.includes('Awaiting payment'));
     assert.match(m.text, /held until 10:15 AM/);
     assert.match(m.text, /Find my booking → CCD-[A-Z0-9]{8} → Pay now/);
     assert.match(m.text, /Amount: ₱300\.00/);
@@ -115,11 +115,10 @@ describe('email templates (the website\'s design)', () => {
       paidAt: Timestamp.fromDate(new Date('2026-11-20T02:05:00Z')),
     });
     assert.match(m.subject, /^Your e-ticket · CCD-/);
-    assert.ok(m.html.includes('APPROVED · E-TICKET'));
+    assert.ok(m.html.includes('Confirmed · paid'));
     assert.ok(m.html.includes('E-TICKET · ADMIT 2'));
     assert.ok(m.html.includes(r.bookingReference));
-    assert.match(m.text, /Payment: Paid via GCash on Nov 20, 2026 10:05 AM/);
-    assert.match(m.text, /At the venue|e-ticket/);
+    assert.match(m.text, /Payment: Paid via GCash, Nov 20, 2026, 10:05 AM/);
   });
 
   test('cancelled: the reason, and a refund note when money was received', async () => {
@@ -138,9 +137,34 @@ describe('email templates (the website\'s design)', () => {
     assert.match(staff.text, /about your refund/);
   });
 
+  test('the booking list (Find my booking by email): every upcoming reference', async () => {
+    const a = await reservation(await book());
+    const b = await reservation(await book('paid1', ['C1']));
+    const m = renderBookingList([a, b]);
+    assert.equal(m.subject, 'Your upcoming bookings · Cinematheque Centre Davao');
+    assert.ok(m.html.includes(a.bookingReference) && m.html.includes(b.bookingReference));
+    assert.match(m.text, /Awaiting approval/);
+    assert.match(m.text, /Awaiting payment/);
+  });
+
   test('pesos', () => {
     assert.equal(formatPeso(30000), '₱300');
     assert.equal(formatPeso(1234550), '₱12,345.50');
+  });
+});
+
+describe('booking list by email', () => {
+  beforeEach(reset);
+
+  test('sent to the address only when it has upcoming bookings, and not again within 2 minutes', async () => {
+    const mailer = fakeMailer();
+    await book();
+    assert.equal(await emailBookingList(db, 'nobody@example.com', { mailer, now }), 'nothing_sent');
+    assert.equal(await emailBookingList(db, ' MARIA@example.com ', { mailer, now }), 'sent');
+    assert.equal(mailer.sent[0].to, 'maria@example.com');
+    assert.equal(await emailBookingList(db, 'maria@example.com', { mailer, now: new Date(now.getTime() + 60_000) }), 'too_soon');
+    assert.equal(await emailBookingList(db, 'maria@example.com', { mailer, now: new Date(now.getTime() + 3 * 60_000) }), 'sent');
+    assert.equal(mailer.sent.length, 2);
   });
 });
 

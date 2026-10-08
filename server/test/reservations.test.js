@@ -84,7 +84,7 @@ describe('validation (server side)', () => {
   test('a correct request passes and is normalised', () => {
     const v = valid();
     assert.equal(v.booker.middleName, null, 'empty optional text becomes null');
-    assert.equal(v.booker.contactNo, '0917 123 4567');
+    assert.equal(v.booker.contactNo, '+639171234567', 'stored as +639…');
     assert.equal(v.attendees.A2.firstName, 'Maria');
   });
 
@@ -94,7 +94,7 @@ describe('validation (server side)', () => {
     }));
     assert.equal(errors['booker.firstName'], 'This field is required.');
     assert.match(errors['booker.lastName'], /at most 50/);
-    assert.match(errors['booker.contactNo'], /contact number/);
+    assert.match(errors['booker.contactNo'], /mobile number/);
     assert.match(errors['booker.email'], /email/);
   });
 
@@ -195,18 +195,28 @@ describe('creating reservations', () => {
 describe('lookup by reference + email', () => {
   beforeEach(reset);
 
-  test('finds the booking; case and spacing do not matter', async () => {
+  test('a reference alone opens the booking; case and spacing do not matter', async () => {
     const created = await createReservation(db, valid(), { now });
-    const found = await lookupBooking(db, { bookingReference: created.bookingReference.toLowerCase(), email: '  JUAN@example.COM ' });
+    const found = await lookupBooking(db, { bookingReference: ` ${created.bookingReference.toLowerCase()} ` });
     assert.equal(found.accessKey, created.accessKey);
+    const viaApi = await call(lookupEndpoint, { bookingReference: created.bookingReference });
+    assert.equal(viaApi.body.accessKey, created.accessKey);
   });
 
-  test('wrong email and unknown reference give the same answer', async () => {
-    const created = await createReservation(db, valid(), { now });
-    const wrongEmail = await call(lookupEndpoint, { bookingReference: created.bookingReference, email: 'someone@else.com' });
-    const unknownRef = await call(lookupEndpoint, { bookingReference: 'CCD-AAAAAAAA', email: 'juan@example.com' });
-    const garbage = await call(lookupEndpoint, { bookingReference: 42, email: null });
-    for (const r of [wrongEmail, unknownRef, garbage]) assert.deepEqual(r, { status: 404, body: { error: 'not_found' } });
+  test('unknown or malformed references → 404', async () => {
+    for (const ref of ['CCD-AAAAAAAA', 'nonsense']) {
+      assert.deepEqual(await call(lookupEndpoint, { bookingReference: ref }), { status: 404, body: { error: 'not_found' } });
+    }
+  });
+
+  test('an email alone answers the same whether or not it has bookings (the list goes to that inbox)', async () => {
+    await createReservation(db, valid(), { now });
+    const known = await call(lookupEndpoint, { email: 'juan@example.com' });
+    const unknown = await call(lookupEndpoint, { email: 'nobody@example.com' });
+    assert.deepEqual(known, { status: 200, body: { emailed: true } });
+    assert.deepEqual(unknown, known);
+    assert.equal((await call(lookupEndpoint, { email: 'not-an-email' })).status, 400);
+    assert.equal((await call(lookupEndpoint, {})).status, 400);
   });
 });
 

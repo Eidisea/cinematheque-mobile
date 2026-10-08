@@ -64,8 +64,12 @@ class ApiException implements Exception {
 abstract class BookingApi {
   Future<CreatedBooking> createReservation(ReservationRequest request);
 
-  /// Returns the access key of the booking with this reference AND email.
-  Future<String> lookup({required String bookingReference, required String email});
+  /// Find my booking by reference → that booking's access key.
+  Future<String> lookup({required String bookingReference});
+
+  /// Find my booking by email: the server emails that address its upcoming booking
+  /// references (the answer is the same whether or not it has any).
+  Future<void> emailBookings(String email);
 
   Future<void> cancel(String accessKey);
 
@@ -129,10 +133,13 @@ class HttpBookingApi implements BookingApi {
   }
 
   @override
-  Future<String> lookup({required String bookingReference, required String email}) async {
-    final j = await _post('/api/bookings/lookup', {'bookingReference': bookingReference, 'email': email});
+  Future<String> lookup({required String bookingReference}) async {
+    final j = await _post('/api/bookings/lookup', {'bookingReference': bookingReference});
     return j['accessKey'] as String;
   }
+
+  @override
+  Future<void> emailBookings(String email) => _post('/api/bookings/lookup', {'email': email});
 
   @override
   Future<void> cancel(String accessKey) => _post('/api/bookings/cancel', {'accessKey': accessKey});

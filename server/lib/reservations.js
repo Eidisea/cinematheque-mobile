@@ -138,16 +138,28 @@ export async function createReservation(
   return created;
 }
 
-/** Reference + email → access key. Same answer whether the reference or the email is wrong. */
-export async function lookupBooking(db, { bookingReference, email }) {
+/**
+ * Find my booking, by reference: the reference (random, printed on the ticket and in the
+ * emails) opens the booking → its access key. Unknown or malformed → not_found.
+ */
+export async function lookupBooking(db, { bookingReference }) {
   const ref = normalizeBookingReference(bookingReference);
-  const emailLower = typeof email === 'string' ? email.trim().toLowerCase() : '';
-  if (!ref || !emailLower) throw new ReservationError('not_found');
-
+  if (!ref) throw new ReservationError('not_found');
   const snap = await db.collection('reservations').where('bookingReference', '==', ref).limit(1).get();
   const doc = snap.docs[0];
-  if (!doc || doc.data().bookerEmailLower !== emailLower) throw new ReservationError('not_found');
+  if (!doc) throw new ReservationError('not_found');
   return { bookingReference: ref, accessKey: doc.data().accessKey };
+}
+
+/** The booker's bookings for screenings that have not started yet, soonest first. */
+export async function upcomingBookingsFor(db, email, now = new Date()) {
+  const emailLower = typeof email === 'string' ? email.trim().toLowerCase() : '';
+  if (!emailLower) return [];
+  const snap = await db.collection('reservations').where('bookerEmailLower', '==', emailLower).get();
+  return snap.docs
+    .map((d) => d.data())
+    .filter((r) => r.screening.startAt.toMillis() > now.getTime())
+    .sort((a, b) => a.screening.startAt.toMillis() - b.screening.startAt.toMillis());
 }
 
 export async function findReservationIdByAccessKey(db, accessKey) {

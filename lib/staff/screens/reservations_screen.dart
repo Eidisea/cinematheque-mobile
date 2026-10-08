@@ -164,7 +164,13 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
             alignment: WrapAlignment.spaceBetween,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
-              _Chips(current: _view, counts: counts, onSelect: (v) => setState(() => _view = v)),
+              FilterChips<ReservationView>(
+                values: ReservationView.values,
+                current: _view,
+                label: (v) => v.label,
+                count: (v) => counts[v] ?? 0,
+                onSelect: (v) => setState(() => _view = v),
+              ),
               Wrap(
                 spacing: 8,
                 runSpacing: 8,
@@ -199,8 +205,8 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                         value: _screeningId,
                         isExpanded: true,
                         isDense: true,
-                        style: const TextStyle(fontSize: 13, color: StaffColors.text),
-                        hint: const Text('All screenings', style: TextStyle(fontSize: 13)),
+                        style: const TextStyle(fontFamily: 'Geist', fontSize: 13, color: StaffColors.text),
+                        hint: const Text('All screenings', style: TextStyle(fontFamily: 'Geist', fontSize: 13)),
                         items: [
                           const DropdownMenuItem<String?>(value: null, child: Text('All screenings')),
                           for (final e in picker)
@@ -249,69 +255,6 @@ class _ReservationsScreenState extends State<ReservationsScreen> {
                 ),
               ),
           ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Segmented quick filters with counts; the current one is dark.
-class _Chips extends StatelessWidget {
-  const _Chips({required this.current, required this.counts, required this.onSelect});
-
-  final ReservationView current;
-  final Map<ReservationView, int> counts;
-  final ValueChanged<ReservationView> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        color: StaffColors.surface,
-        border: Border.all(color: StaffColors.borderStrong),
-        borderRadius: BorderRadius.circular(4),
-      ),
-      child: Wrap(
-        children: [
-          for (final v in ReservationView.values)
-            Semantics(
-              button: true,
-              selected: v == current,
-              child: InkWell(
-                onTap: () => onSelect(v),
-                child: Container(
-                  height: 32,
-                  padding: const EdgeInsets.symmetric(horizontal: 12),
-                  decoration: BoxDecoration(
-                    color: v == current ? const Color(0xFF1F2937) : null,
-                    border: v == ReservationView.values.last ? null : const Border(right: BorderSide(color: StaffColors.border)),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        v.label,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                          color: v == current ? Colors.white : StaffColors.gray700,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        '${counts[v] ?? 0}',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: (v == current ? Colors.white : StaffColors.gray700).withValues(alpha: 0.7),
-                          fontFeatures: const [FontFeature.tabularFigures()],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
         ],
       ),
     );

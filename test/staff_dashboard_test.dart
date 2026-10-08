@@ -149,4 +149,19 @@ void main() {
     expect(find.text('Nothing to approve or refund.'), findsOneWidget);
     expect(find.text('No bookings yet.'), findsOneWidget);
   });
+
+  testWidgets('without a seat layout: a one-time "Set up the hall" (120 seats)', (tester) async {
+    tester.view.physicalSize = const Size(1280, 900);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final session = FakeStaffSession()..setState(StaffSessionStatus.signedIn, staff: FakeStaffSession.member);
+    final repo = FakeStaffRepository(hasSeatLayout: false);
+    await tester.pumpWidget(StaffApp(startup: const FirebaseStartup.ready(), session: session, clock: FixedClock(now), data: repo));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('The hall is not set up yet.', findRichText: true), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Set up the hall'));
+    await tester.pumpAndSettle();
+    expect(repo.hasSeatLayout, isTrue);
+    expect(find.textContaining('The hall is not set up yet.', findRichText: true), findsNothing);
+  });
 }

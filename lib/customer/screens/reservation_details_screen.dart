@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../api/booking_api.dart';
@@ -46,7 +47,6 @@ class _PersonFields {
 }
 
 final _emailPattern = RegExp(r'^[^\s@]+@[^\s@]+\.[^\s@]{2,}$');
-final _phonePattern = RegExp(r'^[0-9+()\-\s]{7,20}$');
 
 String? _required(String? v) => (v ?? '').trim().isEmpty ? 'Required' : null;
 String? _name(String? v) => _required(v) ?? ((v!.trim().length > 50) ? 'Use at most 50 characters' : null);
@@ -58,10 +58,23 @@ String? _age(String? v) {
   return n == null || n < 0 || n > 120 ? '0–120' : null;
 }
 
-String? _phone(String? v, {bool required = false}) {
-  final t = (v ?? '').trim();
-  if (t.isEmpty) return required ? 'Required' : null;
-  return _phonePattern.hasMatch(t) ? null : 'Enter a valid contact number';
+/// The 10 digits after +63 (9XX XXX XXXX), as the website asks for them.
+String? _mobile(String? v) {
+  final t = (v ?? '').replaceAll(' ', '');
+  if (t.isEmpty) return 'Required';
+  return RegExp(r'^9\d{9}$').hasMatch(t) ? null : '10 digits starting with 9';
+}
+
+/// Keeps only the 10 digits after +63; a pasted 0917… or +63 917… is cut down to 917….
+class _MobileDigits extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(TextEditingValue oldValue, TextEditingValue newValue) {
+    var digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    if (digits.length > 10 && digits.startsWith('63')) digits = digits.substring(2);
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    if (digits.length > 10) digits = digits.substring(0, 10);
+    return TextEditingValue(text: digits, selection: TextSelection.collapsed(offset: digits.length));
+  }
 }
 
 String? _email(String? v, {bool required = false}) {
@@ -107,7 +120,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
           'firstName': _clean(_primary.first),
           'middleName': _clean(_primary.middle),
           'lastName': _clean(_primary.last),
-          'contactNo': _clean(_primary.contact),
+          'contactNo': '+63${_primary.contact.text.trim()}',
           'email': _clean(_primary.email),
         },
         attendees: {
@@ -119,7 +132,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
               'age': int.tryParse(e.value.age.text.trim()),
               'sex': e.value.sex,
               'companySchool': _clean(e.value.company),
-              'contactNo': _clean(e.value.contact),
+              'contactNo': '+63${e.value.contact.text.trim()}',
               'email': _clean(e.value.email),
               'seniorCardNo': _clean(e.value.senior),
               'isPwd': e.value.isPwd,
@@ -325,10 +338,7 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
             _field(a.middle, 'Middle name (optional)',
                 validator: _optionalName, capitalize: true, autofill: primary ? AutofillHints.middleName : null),
             _field(a.last, 'Last name', validator: _name, capitalize: true, autofill: primary ? AutofillHints.familyName : null),
-            _field(a.contact, 'Mobile number',
-                validator: (v) => _phone(v, required: true),
-                keyboard: TextInputType.phone,
-                autofill: primary ? AutofillHints.telephoneNumber : null),
+            _mobileField(a.contact, autofill: primary ? AutofillHints.telephoneNumberNational : null),
             _field(a.email, 'Email',
                 validator: (v) => _email(v, required: true),
                 keyboard: TextInputType.emailAddress,
@@ -396,6 +406,43 @@ class _ReservationDetailsScreenState extends State<ReservationDetailsScreen> {
         autofillHints: autofill == null ? null : [autofill],
         textInputAction: TextInputAction.next,
         autovalidateMode: AutovalidateMode.onUserInteraction,
+      ),
+    );
+  }
+
+  /// The country code in its own box, then the 10 digits (as on the website).
+  Widget _mobileField(TextEditingController controller, {String? autofill}) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            height: 52,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: CustomerColors.neutralTint,
+              border: Border.all(color: CustomerColors.border),
+              borderRadius: BorderRadius.circular(Radii.md),
+            ),
+            child: const Text('+63', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              enabled: !_busy,
+              decoration: const InputDecoration(labelText: 'Mobile number', hintText: '9XX XXX XXXX', counterText: ''),
+              validator: _mobile,
+              keyboardType: TextInputType.phone,
+              inputFormatters: [_MobileDigits()],
+              autofillHints: autofill == null ? null : [autofill],
+              textInputAction: TextInputAction.next,
+              autovalidateMode: AutovalidateMode.onUserInteraction,
+            ),
+          ),
+        ],
       ),
     );
   }
